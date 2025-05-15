@@ -1,6 +1,7 @@
 A plugin for Obsidian that automatically formats pasted links with metadata, with explicit support for YouTube.
 
-## Regular Link Formatting
+# Formatting
+Variables are replaced dynamically by the plugin. The first instance of square brackets `[]` will be a hyperlink for the clipboard content.
 
 For non-YouTube links, the following variables are available:
 
@@ -25,7 +26,7 @@ When pasting a YouTube link, the following variables are available for formattin
 
 Example format: `[{title}] by {channel}`
 
-## Features
+# Features
 
 - Automatically formats pasted links
 - Supports custom formatting for both YouTube and regular links
