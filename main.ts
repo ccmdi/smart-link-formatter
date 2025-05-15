@@ -299,7 +299,6 @@ export default class SmartLinkFormatterPlugin extends Plugin {
 
         formattedText = formattedText.replace('{url}', clipboardText);
         formattedText = formattedText.replace('{timestamp}', timestampStr);
-        formattedText = formattedText.replace('{thumbnail}', ''); 
 
         const linkMatch = formattedText.match(/\[(.*?)\]/); // IMPORTANT: Single bracket is clipboardText
         let finalFormattedLink = formattedText;

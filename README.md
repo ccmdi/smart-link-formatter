@@ -5,9 +5,9 @@ A plugin for Obsidian that automatically formats pasted links with metadata, wit
 For non-YouTube links, the following variables are available:
 
 - `{title}` - Page title
-- `{link}` - The URL of the page
+- `{url}` - The URL of the page
 
-Example format: `[{title}]({link})`
+Example format: `[{title}]`
 
 ## YouTube Link Formatting
 
@@ -22,20 +22,17 @@ When pasting a YouTube link, the following variables are available for formattin
 - `{description}` - Video description
 - `{url}` - The URL of the video
 - `{timestamp}` - For timestamped links (formats as @HH:MM:SS or @MM:SS)
-- `{thumbnail}` - Currently not supported
 
-Example format: `[{title} by {channel}]({url})`
+Example format: `[{title}] by {channel}`
 
 ## Features
 
-- Automatically formats pasted links with metadata
+- Automatically formats pasted links
 - Supports custom formatting for both YouTube and regular links
 - Blacklist domains to prevent automatic formatting
 - Toggle auto-linking on/off
-- Preserves existing link formatting when pasting inside markdown links or code blocks
 
-## Settings
-
-- **Auto-linking**: Enable/disable automatic link formatting
-- **Default link format**: Customize how non-YouTube links are formatted
-- **Blacklisted domains**: Comma-separated list of domains to exclude from automatic formatting
+# Roadmap
+- [ ] Conditional formatting
+- [ ] Expanded services
+- [ ] General robustness
