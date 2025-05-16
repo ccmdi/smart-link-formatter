@@ -1,5 +1,11 @@
 A plugin for Obsidian that automatically formats pasted links with metadata, with explicit support for YouTube.
 
+# Features
+- Automatically formats pasted links
+- Supports custom formatting for both YouTube and regular links
+- Blacklist domains to prevent automatic formatting
+- Toggle auto-linking on/off
+
 # Formatting
 Variables are replaced dynamically by the plugin. The first instance of square brackets `[]` will be a hyperlink for the clipboard content.
 
@@ -25,13 +31,6 @@ When pasting a YouTube link, the following variables are available for formattin
 - `{timestamp}` - For timestamped links (formats as @HH:MM:SS or @MM:SS)
 
 Example format: `[{title}] by {channel}`
-
-# Features
-
-- Automatically formats pasted links
-- Supports custom formatting for both YouTube and regular links
-- Blacklist domains to prevent automatic formatting
-- Toggle auto-linking on/off
 
 # Roadmap
 - [ ] Conditional formatting

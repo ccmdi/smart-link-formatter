@@ -4,7 +4,7 @@ import {
   DEFAULT_SETTINGS,
   LinkFormatterSettingTab,
 } from "./settings";
-
+import { getPageTitle } from "./title-utils";
 
 /**
  * Creates a YouTube timestamp from a given URL.
@@ -16,24 +16,6 @@ function getYouTubeTimestamp(url: URL): number {
     url.searchParams.get("t") || url.searchParams.get("time_continue") || "";
   timestamp = timestamp.replace("s", "");
   return Number(timestamp);
-}
-
-/**
- * Fetches the page title from a given URL.
- * @param url - The URL to fetch the title from.
- * @returns The page title as a string.
- */
-async function getPageTitle(url: string): Promise<string> {
-  try {
-    const response = await requestUrl(url);
-    const text = response.text;
-    const doc = new DOMParser().parseFromString(text, "text/html");
-    const title = doc.querySelector("title");
-    return escapeMarkdownChars(title?.innerText || url);
-  } catch (error) {
-    console.error(`Failed to fetch page title for ${url}:`, error);
-    return url;
-  }
 }
 
 /**
@@ -89,7 +71,7 @@ function formatDuration(totalSeconds: number): string {
  * @returns The escaped string.
  */
 function escapeMarkdownChars(text: string): string {
-  return text.replace(/([[\]|*_`\\])/g, "\\$1");
+  return text.replace(/([\[\]|*_`\\])/g, "\\$1");
 }
 
 /**
@@ -111,7 +93,6 @@ async function fetchYouTubeMetadata(url: string): Promise<Record<string, string 
     const response = await requestUrl({ url: url, method: 'GET' });
     const html = response.text;
 
-    // Try to find the ytInitialPlayerResponse
     let playerResponseJson: any = null;
     try {
         const match = html.match(/var ytInitialPlayerResponse = ({.*?});/);
@@ -143,10 +124,10 @@ async function fetchYouTubeMetadata(url: string): Promise<Record<string, string 
           const uploadDate = microformat?.publishDate;
 
           return {
-              title: title,
-              uploader: uploader,
-              channel: uploader,
-              description: description, 
+              title: title ? escapeMarkdownChars(title) : undefined,
+              uploader: uploader ? escapeMarkdownChars(uploader) : undefined,
+              channel: uploader ? escapeMarkdownChars(uploader) : undefined, 
+              description: description ? escapeMarkdownChars(description) : undefined, 
               views: views ? parseInt(views).toLocaleString() : undefined,
               duration: durationSeconds ? formatDuration(parseInt(durationSeconds)) : undefined,
               upload_date: uploadDate ? formatDate(uploadDate.replace(/-/g, '')) : undefined,
@@ -163,11 +144,13 @@ async function fetchYouTubeMetadata(url: string): Promise<Record<string, string 
 
   // Fallback
   return {
-      title: url,
+      title: escapeMarkdownChars(url),
       uploader: undefined,
       channel: undefined,
       description: undefined,
       views: undefined,
+      duration: undefined, 
+      upload_date: undefined,
   };
 }
 
@@ -213,10 +196,10 @@ export default class SmartLinkFormatterPlugin extends Plugin {
     const activeFile = this.app.workspace.getActiveFile();
     if (!activeFile) return; // Should not happen in editor paste, but safety check
 
-    // --- Context Check ---
+    // Context check
     const cursor = editor.getCursor();
     const line = editor.getLine(cursor.line);
-
+    
     // Check if pasting inside the parentheses of a markdown link: [...](|)
     // Matches if the text immediately before cursor is "](" and char after is ")"
     // Also check if there is a selection - if so, allow pasting over it
@@ -237,23 +220,17 @@ export default class SmartLinkFormatterPlugin extends Plugin {
             return;
         }
     }
-    // --- End Context Check ---
 
     evt.preventDefault();
-
     const placeholder = generateUniqueToken();
-    
     const selectionStartCursor = editor.getCursor('from');
     const startOffset = editor.posToOffset(selectionStartCursor); 
-
     editor.replaceSelection(placeholder); 
-    
     const placeholderStartPos = editor.offsetToPos(startOffset);
     const placeholderEndPos = editor.offsetToPos(startOffset + placeholder.length);
-    
     editor.setCursor(placeholderEndPos);
 
-    // --- Blacklist Check ---
+    // Blacklist check
     try {
       const url = new URL(clipboardText);
       const blacklist = this.settings.blacklistedDomains
@@ -274,7 +251,7 @@ export default class SmartLinkFormatterPlugin extends Plugin {
       // YouTube
       if (clipboardText.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/)[a-zA-Z0-9_-]+/)) {
         const metadata = await fetchYouTubeMetadata(clipboardText);
-
+        
         const urlObj = new URL(clipboardText);
         const seconds = getYouTubeTimestamp(urlObj);
         let timestampStr = "";
@@ -288,76 +265,57 @@ export default class SmartLinkFormatterPlugin extends Plugin {
         }
 
         let formattedText = this.settings.printCommand;
-
-        formattedText = formattedText.replace('{title}', escapeMarkdownChars(metadata.title || ''));
-        formattedText = formattedText.replace('{channel}', escapeMarkdownChars(metadata.channel || '')); 
-        formattedText = formattedText.replace('{uploader}', escapeMarkdownChars(metadata.uploader || ''));
-        formattedText = formattedText.replace('{description}', escapeMarkdownChars(metadata.description || ''));
+        formattedText = formattedText.replace('{title}', metadata.title || '');
+        formattedText = formattedText.replace('{channel}', metadata.channel || ''); 
+        formattedText = formattedText.replace('{uploader}', metadata.uploader || '');
+        formattedText = formattedText.replace('{description}', metadata.description || '');
         formattedText = formattedText.replace('{views}', metadata.views || '');
         formattedText = formattedText.replace('{duration}', metadata.duration || '');
         formattedText = formattedText.replace('{upload_date}', metadata.upload_date || '');
-
         formattedText = formattedText.replace('{url}', clipboardText);
         formattedText = formattedText.replace('{timestamp}', timestampStr);
 
-        const linkMatch = formattedText.match(/\[(.*?)\]/); // IMPORTANT: Single bracket is clipboardText
+        const linkMatch = formattedText.match(/\[(.*?)\]/);  // IMPORTANT: Single bracket is clipboardText
         let finalFormattedLink = formattedText;
-
         if (linkMatch && linkMatch[1]) {
           const linkContent = linkMatch[1];
           const firstBracketIndex = formattedText.indexOf(linkMatch[0]);
           const suffix = formattedText.slice(firstBracketIndex + linkMatch[0].length).trim();
-           
-          finalFormattedLink = `[${linkContent}](${clipboardText})${
-            suffix ? " " + suffix : ""
-          }`;
+          finalFormattedLink = `[${linkContent}](${clipboardText})${suffix ? " " + suffix : ""}`;
         } else {
            finalFormattedLink = `[${formattedText.trim()}](${clipboardText})`;
         }
-
          this.replacePlaceholder(activeFile, placeholder, finalFormattedLink, editor);
       } 
 
       //Other links
       else {
         const title = await getPageTitle(clipboardText);
-        
         let formattedText = this.settings.defaultLinkFormat;
         formattedText = formattedText.replace('{title}', title);
         formattedText = formattedText.replace('{url}', clipboardText);
 
-        const linkMatch = formattedText.match(/\[(.*?)\]/); // IMPORTANT: Single bracket is clipboardText
+        const linkMatch = formattedText.match(/\[(.*?)\]/);  // IMPORTANT: Single bracket is clipboardText
         let finalFormattedLink = "";
-
         if (linkMatch && linkMatch[1]) {
           const linkContent = linkMatch[1];
           const firstBracketIndex = formattedText.indexOf(linkMatch[0]);
-          const suffix = formattedText
-            .slice(firstBracketIndex + linkMatch[0].length)
-            .trim();
-          finalFormattedLink = `[${linkContent}](${clipboardText})${
-            suffix ? " " + suffix : ""
-          }`;
+          const suffix = formattedText.slice(firstBracketIndex + linkMatch[0].length).trim();
+          finalFormattedLink = `[${linkContent}](${clipboardText})${suffix ? " " + suffix : ""}`;
         } else {
           finalFormattedLink = `[${formattedText.trim()}](${clipboardText})`;
         }
-        this.replacePlaceholder(
-          activeFile,
-          placeholder,
-          finalFormattedLink,
-          editor
-        );
+        this.replacePlaceholder(activeFile, placeholder, finalFormattedLink, editor);
       }
     } catch (error) {
       console.error("Failed to format link:", error);
       new Notice("Failed to format link");
-      
       const errorFormattedText = `[Failed to fetch title](${clipboardText})`;
       this.replacePlaceholder(activeFile, placeholder, errorFormattedText, editor);
     }
   }
 
-  /** 
+   /** 
    * Replaces the placeholder with the final text.
    * @param file - The file to replace the placeholder in.
    * @param placeholder - The placeholder to replace.
@@ -373,7 +331,7 @@ export default class SmartLinkFormatterPlugin extends Plugin {
     try {
         const vaultContent = await this.app.vault.read(file);
         const editorContent = editor.getValue();
-
+        
         // Prefer editor content for replacement if it contains the placeholder, 
         // as it's likely the most up-to-date. Otherwise, use vault content.
         if (editorContent.includes(placeholder)) {
@@ -392,3 +350,5 @@ export default class SmartLinkFormatterPlugin extends Plugin {
     }
   }
 }
+
+export { escapeMarkdownChars };
