@@ -45,8 +45,7 @@ export class LinkFormatterSettingTab extends PluginSettingTab {
                 .setValue(this.plugin.settings.defaultLinkFormat)
                 .then(textArea => {
                     textArea.inputEl.rows = 2;
-                    textArea.inputEl.style.width = "100%";
-                    textArea.inputEl.style.resize = "none";
+                    textArea.inputEl.addClass('smart-link-formatter-setting-textarea');
                 })
                 .onChange(async (value) => {
                     this.plugin.settings.defaultLinkFormat = value;
@@ -61,8 +60,7 @@ export class LinkFormatterSettingTab extends PluginSettingTab {
                 .setValue(this.plugin.settings.blacklistedDomains)
                 .then(textArea => {
                     textArea.inputEl.rows = 2;
-                    textArea.inputEl.style.width = "100%";
-                    textArea.inputEl.style.resize = "none";
+                    textArea.inputEl.addClass('smart-link-formatter-setting-textarea');
                 })
                 .onChange(async (value) => {
                     this.plugin.settings.blacklistedDomains = value;
@@ -78,8 +76,7 @@ export class LinkFormatterSettingTab extends PluginSettingTab {
                 .then(textArea => {
                     textArea.inputEl.rows = 4;
                     textArea.inputEl.cols = 50;
-                    textArea.inputEl.style.width = "100%";
-                    textArea.inputEl.style.resize = "none";
+                    textArea.inputEl.addClass('smart-link-formatter-setting-textarea');
                 })
                 .onChange(async (value) => {
                     this.plugin.settings.printCommand = value;
