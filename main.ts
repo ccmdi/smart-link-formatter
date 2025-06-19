@@ -169,12 +169,6 @@ export default class SmartLinkFormatterPlugin extends Plugin {
         }
       )
     );
-
-    this.registerMarkdownPostProcessor((el) => {
-      el.querySelectorAll('.link-loading').forEach((loadingEl) => {
-        loadingEl.addClass('link-loading');
-      });
-    });
   }
 
 
@@ -329,7 +323,6 @@ export default class SmartLinkFormatterPlugin extends Plugin {
     editor: Editor
   ) {
     try {
-        const vaultContent = await this.app.vault.read(file);
         const editorContent = editor.getValue();
         
         // Prefer editor content for replacement if it contains the placeholder, 
@@ -338,9 +331,6 @@ export default class SmartLinkFormatterPlugin extends Plugin {
             const startPos = editor.offsetToPos(editorContent.indexOf(placeholder));
             const endPos = editor.offsetToPos(editorContent.indexOf(placeholder) + placeholder.length);
             editor.replaceRange(newText, startPos, endPos);
-        } else if (vaultContent.includes(placeholder)) {
-            const newContent = vaultContent.replace(placeholder, newText);
-            await this.app.vault.modify(file, newContent);
         } else {
              console.warn("Smart Link Formatter: Placeholder not found in editor or vault content.");
         }

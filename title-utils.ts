@@ -1,13 +1,5 @@
-import { requestUrl } from 'obsidian';
+import { requestUrl, Platform } from 'obsidian';
 import { escapeMarkdownChars } from './main';
-
-let electronPkg: any;
-try {
-  electronPkg = require("electron");
-} catch (e) {
-  console.info("Smart Link Formatter: Electron module not available. Will use requestUrl for titles.");
-  electronPkg = null;
-}
 
 /**
  * Checks if a string is undefined, null, or empty.
@@ -77,10 +69,24 @@ async function loadElectronWindow(window: any, url: string): Promise<void> {
 }
 
 async function electronGetPageTitle(url: string): Promise<string | null> {
+  if (Platform.isMobile) {
+    console.warn("Smart Link Formatter: Electron not available on mobile platform.");
+    return null;
+  }
+
+  let electronPkg: any;
+  try {
+    electronPkg = require("electron");
+  } catch (e) {
+    console.warn("Smart Link Formatter: Electron module not available.");
+    return null;
+  }
+
   if (!electronPkg || !electronPkg.remote) {
     console.warn("Smart Link Formatter: Electron remote module not available for electronGetPageTitle.");
     return null;
   }
+  
   const { BrowserWindow } = electronPkg.remote;
   let window: any = null;
 
@@ -195,17 +201,19 @@ async function getPageTitleOrchestrator(url: string): Promise<string> {
     return escapeMarkdownChars(nonHtmlTitle);
   }
 
-  if (electronPkg && electronPkg.remote) {
+  if (Platform.isMobile) {
+    title = await fetchTitleWithRequestUrl(processedUrl);
+  } else {
     try {
       title = await electronGetPageTitle(processedUrl);
     } catch (electronError) {
       console.error(`Smart Link Formatter: electronGetPageTitle failed for ${processedUrl}:`, electronError);
       title = null;
     }
-  }
 
-  if (blank(title)) {
-    title = await fetchTitleWithRequestUrl(processedUrl);
+    if (blank(title)) {
+      title = await fetchTitleWithRequestUrl(processedUrl);
+    }
   }
   
   return escapeMarkdownChars(title || processedUrl);
