@@ -3,6 +3,7 @@ import { escapeMarkdownChars, formatDuration, formatDate } from "utils";
 import { Notice } from "obsidian";
 import SmartLinkFormatterPlugin from "main";
 import { getPageTitle } from "title-utils";
+import moment from "moment";
 
 export interface Client {
   name: ClientName; // Unique identifier for the client
@@ -31,17 +32,25 @@ export function formatTemplate(
   metadata: Record<string, string | undefined>,
   url: string
 ): string {
-  let formatted = template;
+  return template.replace(/{([^{}]+?)}/g, (match, key) => {
+    const [variable, format] = key.split('|').map((s: string) => s.trim());
 
-  // Replace all metadata variables
-  for (const [key, value] of Object.entries(metadata)) {
-    const placeholder = `{${key}}`;
-    formatted = formatted.replace(new RegExp(placeholder, "g"), value || "");
-  }
+    if (variable === "url") {
+      return url;
+    }
 
-  formatted = formatted.replace(/{url}/g, url);
+    const value = metadata[variable];
+    if (value === undefined) {
+      return '';
+    }
 
-  return formatted;
+    const dateFields = ['upload_date'];
+    if (format && dateFields.includes(variable) && moment(value).isValid()) {
+      return moment(value).format(format);
+    }
+
+    return String(value);
+  });
 }
 
 /**
@@ -139,9 +148,7 @@ class YouTubeClient implements Client {
             duration: durationSeconds
               ? formatDuration(parseInt(durationSeconds))
               : undefined,
-            upload_date: uploadDate
-              ? formatDate(uploadDate.replace(/-/g, ""))
-              : undefined,
+            upload_date: uploadDate ? escapeMarkdownChars(uploadDate) : undefined,
           };
         } else {
           console.warn(
