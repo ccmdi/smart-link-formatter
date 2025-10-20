@@ -345,6 +345,64 @@ class ImageClient implements Client {
   }
 }
 
+class GitHubClient implements Client {
+  readonly name = "github" as const;
+  displayName = "GitHub";
+  defaultFormat = "[{owner}/{repo}]: {description}";
+
+  getAvailableVariables(): string[] {
+    return ["owner", "repo", "description"];
+  }
+
+  matches = (url: string) => {
+    return /^https?:\/\/github\.com\/[\w-]+\/[\w-]+(\/)?$/.test(url);
+  };
+
+  async fetchMetadata(
+    url: string
+  ): Promise<Record<string, string | undefined>> {
+    try {
+      const response = await requestUrl({ url: url, method: "GET" });
+      const html = response.text;
+
+      const titleMatch = html.match(
+        /<meta property="og:title" content="([^"]+)"/
+      );
+      const fullRepoName = titleMatch?.[1];
+
+      let owner, repo, description;
+      if (fullRepoName) {
+        [owner, repo] = fullRepoName.split("/");
+        [repo, description] = repo.split(": ");
+        owner = owner.split("- ")[1];
+      }
+      console.log(owner, "|", repo, "|", description);
+
+      return {
+        owner: owner ? escapeMarkdownChars(owner) : undefined,
+        repo: repo ? escapeMarkdownChars(repo) : undefined,
+        description: description ? escapeMarkdownChars(description) : undefined
+      };
+    } catch (error) {
+      console.error(`Failed to fetch GitHub metadata for ${url}:`, error);
+      new Notice("Failed to fetch GitHub data.", 3000);
+    }
+    
+    const title = await getPageTitle(url);
+    return { title: escapeMarkdownChars(title) };
+  }
+
+  format(
+    metadata: Record<string, string | undefined>,
+    url: string,
+    plugin: SmartLinkFormatterPlugin
+  ): string {
+    const template = plugin.settings.clientFormats?.[this.name] || this.defaultFormat;
+    const formattedText = formatTemplate(template, metadata, url);
+    return wrapInMarkdownLink(formattedText, url);
+  }
+}
+
 /**
  * Fallback client that matches every link and simply formats the title.
  */
@@ -375,6 +433,7 @@ export const CLIENTS = [
   new YouTubeClient(),
   new YouTubeMusicClient(),
   new ImageClient(),
+  new GitHubClient(),
   new DefaultClient(),
 ] as const;
 
