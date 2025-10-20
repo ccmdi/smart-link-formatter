@@ -1,5 +1,5 @@
 import { App, PluginSettingTab, Setting } from "obsidian";
-import SmartLinkFormatterPlugin from "./main";
+import SmartLinkFormatterPlugin from "main";
 
 export interface LinkFormatterSettings {
     printCommand: string;

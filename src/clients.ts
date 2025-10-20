@@ -1,5 +1,5 @@
 import { requestUrl } from "obsidian";
-import { escapeMarkdownChars, formatDuration, formatDate } from "./utils";
+import { escapeMarkdownChars, formatDuration, formatDate } from "utils";
 import { Notice } from "obsidian";
 import SmartLinkFormatterPlugin from "main";
 import { getPageTitle } from "title-utils";
