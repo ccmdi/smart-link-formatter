@@ -30,6 +30,17 @@
 }
 
 .smart-link-formatter-setting-textarea {
-  width: 100%;
+  width: 200px;
   resize: none;
+}
+
+.flex-container {
+  display: flex;
+  flex-direction: column;
+  height: 400px; /* An explicit height is required */
+}
+
+.flex-container textarea {
+  height: 80%; /* This will now work */
+  width: 100%;
 }

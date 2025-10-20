@@ -39,7 +39,6 @@ export function formatTemplate(
     formatted = formatted.replace(new RegExp(placeholder, 'g'), value || '');
   }
 
-  // Always replace {url} with the actual URL
   formatted = formatted.replace(/{url}/g, url);
 
   return formatted;
@@ -68,7 +67,7 @@ export function wrapInMarkdownLink(formattedText: string, url: string): string {
 }
 
 class YouTubeClient implements Client {
-  name = "youtube";
+  readonly name = "youtube" as const;
   displayName = "YouTube";
   defaultFormat = "[{title}] by {channel}";
 
@@ -209,7 +208,7 @@ class YouTubeClient implements Client {
 }
 
 class YouTubeMusicClient implements Client {
-  name = "youtube-music";
+  readonly name = "youtube-music" as const;
   displayName = "YouTube Music";
   defaultFormat = "[{title}] - {artist}";
 
@@ -303,7 +302,7 @@ class YouTubeMusicClient implements Client {
  * Fallback client that matches every link and simply formats the title.
  */
 class DefaultClient implements Client {
-    name = "default";
+    readonly name = "default" as const;
     displayName = "Default";
     defaultFormat = "[{title}]";
 
@@ -325,8 +324,10 @@ class DefaultClient implements Client {
     }
 }
 
-export const CLIENTS: Client[] = [
+export const CLIENTS = [
     new YouTubeClient(),
     new YouTubeMusicClient(),
     new DefaultClient()
-];
+] as const;
+
+export type ClientName = typeof CLIENTS[number]['name'];

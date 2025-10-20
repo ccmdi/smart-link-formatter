@@ -1,11 +1,11 @@
 import { App, PluginSettingTab, Setting } from "obsidian";
 import SmartLinkFormatterPlugin from "main";
-import { CLIENTS } from "clients";
+import { CLIENTS, ClientName } from "clients";
 
 export interface LinkFormatterSettings {
     autoLink: boolean;
     blacklistedDomains: string;
-    clientFormats: Record<string, string>; // Maps client.name -> format template
+    clientFormats: Partial<Record<ClientName, string>>; // Maps ClientName -> format template
 }
 
 export const DEFAULT_SETTINGS: LinkFormatterSettings = {
@@ -13,7 +13,6 @@ export const DEFAULT_SETTINGS: LinkFormatterSettings = {
     blacklistedDomains: '',
     clientFormats: {}
 };
-
 export class LinkFormatterSettingTab extends PluginSettingTab {
     plugin: SmartLinkFormatterPlugin;
 
@@ -52,24 +51,28 @@ export class LinkFormatterSettingTab extends PluginSettingTab {
                 }));
 
         for (const client of CLIENTS) {
-            const availableVars = client.getAvailableVariables();
-            const varList = availableVars.map(v => `{${v}}`).join(', ');
-            const description = `Customize how ${client.displayName} links are formatted. Available variables: ${varList}. Default: ${client.defaultFormat}`;
+            const setting = new Setting(containerEl)
+                .setName(`${client.displayName} link format`);
+            
+            setting.descEl.appendText('Available variables:');
+            const ul = setting.descEl.createEl('ul');
+            for (const v of client.getAvailableVariables()) {
+                ul.createEl('li').createEl('code', { text: `{${v}}` });
+            }
+            const defaultTag = setting.descEl.createEl('span', { text: `Default: ` });
+            defaultTag.createEl('code', { text: client.defaultFormat });
 
-            new Setting(containerEl)
-                .setName(`${client.displayName} link format`)
-                .setDesc(description)
-                .addTextArea(text => text
-                    .setPlaceholder(client.defaultFormat)
-                    .setValue(this.plugin.settings.clientFormats[client.name] || client.defaultFormat)
-                    .then(textArea => {
-                        textArea.inputEl.rows = 2;
-                        textArea.inputEl.addClass('smart-link-formatter-setting-textarea');
-                    })
-                    .onChange(async (value) => {
-                        this.plugin.settings.clientFormats[client.name] = value;
-                        await this.plugin.saveSettings();
-                    }));
+            setting.addTextArea(text => text
+                .setPlaceholder(client.defaultFormat)
+                .setValue(this.plugin.settings.clientFormats[client.name] || client.defaultFormat)
+                .then(textArea => {
+                    textArea.inputEl.rows = 2;
+                    textArea.inputEl.addClass('smart-link-formatter-setting-textarea');
+                })
+                .onChange(async (value) => {
+                    this.plugin.settings.clientFormats[client.name] = value;
+                    await this.plugin.saveSettings();
+                }));
         }
     }
 }
