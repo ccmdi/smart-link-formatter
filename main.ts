@@ -4,75 +4,7 @@ import {
   DEFAULT_SETTINGS,
   LinkFormatterSettingTab,
 } from "./settings";
-import { getPageTitle } from "./title-utils";
-
-/**
- * Creates a YouTube timestamp from a given URL.
- * @param url - The URL to fetch the timestamp from.
- * @returns The YouTube timestamp as a number.
- */
-function getYouTubeTimestamp(url: URL): number {
-  let timestamp =
-    url.searchParams.get("t") || url.searchParams.get("time_continue") || "";
-  timestamp = timestamp.replace("s", "");
-  return Number(timestamp);
-}
-
-/**
- * Formats a date string to a more readable format (YYYY/MM/DD).
- * @param dateStr - The date string to format.
- * @returns The formatted date string.
- */
-function formatDate(dateStr: string): string {
-  if (dateStr.match(/^\d{8}$/)) {
-    return `${dateStr.slice(0, 4)}/${dateStr.slice(4, 6)}/${dateStr.slice(
-      6,
-      8
-    )}`;
-  }
-  try {
-    const date = new Date(dateStr);
-    if (!isNaN(date.getTime())) {
-      return (
-        date.getFullYear() +
-        "/" +
-        String(date.getMonth() + 1).padStart(2, "0") +
-        "/" +
-        String(date.getDate()).padStart(2, "0")
-      );
-    }
-  } catch (e) {
-    console.error("Failed to parse date:", e);
-  }
-  return dateStr;
-}
-
-/**
- * Formats a duration in seconds to a more readable format (HH:MM:SS).
- * @param totalSeconds - The duration in seconds.
- * @returns The formatted duration string.
- */
-function formatDuration(totalSeconds: number): string {
-  const hours = Math.floor(totalSeconds / 3600);
-  const minutes = Math.floor((totalSeconds % 3600) / 60);
-  const seconds = totalSeconds % 60;
-
-  const parts: string[] = [];
-  if (hours > 0) parts.push(hours.toString());
-  parts.push(minutes.toString().padStart(hours > 0 ? 2 : 1, '0'));
-  parts.push(seconds.toString().padStart(2, '0'));
-
-  return parts.join(':');
-}
-
-/**
- * Escapes special characters in a string to be used in Markdown.
- * @param text - The string to escape.
- * @returns The escaped string.
- */
-function escapeMarkdownChars(text: string): string {
-  return text.replace(/([\[\]|*_`\\])/g, "\\$1");
-}
+import { CLIENTS } from "clients";
 
 /**
  * Generates a unique placeholder token.
@@ -82,78 +14,6 @@ function generateUniqueToken(): string {
   const id = `link-placeholder-${Date.now()}_${Math.floor(Math.random() * 1000000)}`;
   return `<span class="link-loading" id="${id}">Loading...</span>`; 
 }
-
-/**
- * Fetches YouTube metadata from a given URL.
- * @param url - The URL to fetch the metadata from.
- * @returns The YouTube metadata as a record of strings.
- */
-async function fetchYouTubeMetadata(url: string): Promise<Record<string, string | undefined>> {
-  try {
-    const response = await requestUrl({ url: url, method: 'GET' });
-    const html = response.text;
-
-    let playerResponseJson: any = null;
-    try {
-        const match = html.match(/var ytInitialPlayerResponse = ({.*?});/);
-        if (match && match[1]) {
-            playerResponseJson = JSON.parse(match[1]);
-        } else {
-             const dataMatch = html.match(/var ytInitialData = ({.*?});/);
-             if (dataMatch && dataMatch[1]) {
-                  playerResponseJson = JSON.parse(dataMatch[1]);
-             } else {
-                 console.warn("Could not find ytInitialPlayerResponse or ytInitialData in HTML.");
-             }
-        }
-    } catch (parseError) {
-         console.error("Failed to parse YouTube JSON data:", parseError);
-         playerResponseJson = null;
-    }
-
-    if (playerResponseJson) {
-      const videoDetails = playerResponseJson.videoDetails;
-      const microformat = playerResponseJson.microformat?.playerMicroformatRenderer;
-
-      if (videoDetails || microformat) {
-          const title = videoDetails?.title || microformat?.title?.simpleText;
-          const uploader = videoDetails?.author || microformat?.ownerChannelName?.simpleText;
-          const description = videoDetails?.shortDescription || microformat?.description?.simpleText;
-          const views = videoDetails?.viewCount;
-          const durationSeconds = videoDetails?.lengthSeconds;
-          const uploadDate = microformat?.publishDate;
-
-          return {
-              title: title ? escapeMarkdownChars(title) : undefined,
-              uploader: uploader ? escapeMarkdownChars(uploader) : undefined,
-              channel: uploader ? escapeMarkdownChars(uploader) : undefined, 
-              description: description ? escapeMarkdownChars(description) : undefined, 
-              views: views ? parseInt(views).toLocaleString() : undefined,
-              duration: durationSeconds ? formatDuration(parseInt(durationSeconds)) : undefined,
-              upload_date: uploadDate ? formatDate(uploadDate.replace(/-/g, '')) : undefined,
-          };
-      } else {
-           console.warn("Could not find videoDetails or microformat in JSON data.");
-      }
-    }
-
-  } catch (error) {
-    console.error(`Failed to fetch or parse YouTube metadata for ${url}:`, error);
-    new Notice("Failed to fetch YouTube data.", 3000);
-  }
-
-  // Fallback
-  return {
-      title: escapeMarkdownChars(url),
-      uploader: undefined,
-      channel: undefined,
-      description: undefined,
-      views: undefined,
-      duration: undefined, 
-      upload_date: undefined,
-  };
-}
-
 export default class SmartLinkFormatterPlugin extends Plugin {
   settings: LinkFormatterSettings;
 
@@ -188,7 +48,7 @@ export default class SmartLinkFormatterPlugin extends Plugin {
     if (!clipboardText.match(/^https?:\/\//)) return;
 
     const activeFile = this.app.workspace.getActiveFile();
-    if (!activeFile) return; // Should not happen in editor paste, but safety check
+    if (!activeFile) return;
 
     // Context check
     const cursor = editor.getCursor();
@@ -242,64 +102,14 @@ export default class SmartLinkFormatterPlugin extends Plugin {
     }
 
     try {
-      // YouTube
-      if (clipboardText.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/)[a-zA-Z0-9_-]+/)) {
-        const metadata = await fetchYouTubeMetadata(clipboardText);
+      const client = CLIENTS.find(client => client.matches(clipboardText));
+      if (client) {
+        const metadata = await client.fetchMetadata(clipboardText);
+        const formattedText = client.format(metadata, clipboardText, this);
         
-        const urlObj = new URL(clipboardText);
-        const seconds = getYouTubeTimestamp(urlObj);
-        let timestampStr = "";
-        if (seconds) {
-           const hours = Math.floor(seconds / 3600);
-           const mins = Math.floor((seconds % 3600) / 60);
-           const secs = seconds % 60;
-           timestampStr = hours > 0 
-             ? `@${hours}:${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`
-             : `@${mins}:${secs.toString().padStart(2, '0')}`;
-        }
-
-        let formattedText = this.settings.printCommand;
-        formattedText = formattedText.replace('{title}', metadata.title || '');
-        formattedText = formattedText.replace('{channel}', metadata.channel || ''); 
-        formattedText = formattedText.replace('{uploader}', metadata.uploader || '');
-        formattedText = formattedText.replace('{description}', metadata.description || '');
-        formattedText = formattedText.replace('{views}', metadata.views || '');
-        formattedText = formattedText.replace('{duration}', metadata.duration || '');
-        formattedText = formattedText.replace('{upload_date}', metadata.upload_date || '');
-        formattedText = formattedText.replace('{url}', clipboardText);
-        formattedText = formattedText.replace('{timestamp}', timestampStr);
-
-        const linkMatch = formattedText.match(/\[(.*?)\]/);  // IMPORTANT: Single bracket is clipboardText
-        let finalFormattedLink = formattedText;
-        if (linkMatch && linkMatch[1]) {
-          const linkContent = linkMatch[1];
-          const firstBracketIndex = formattedText.indexOf(linkMatch[0]);
-          const suffix = formattedText.slice(firstBracketIndex + linkMatch[0].length).trim();
-          finalFormattedLink = `[${linkContent}](${clipboardText})${suffix ? " " + suffix : ""}`;
-        } else {
-           finalFormattedLink = `[${formattedText.trim()}](${clipboardText})`;
-        }
-         this.replacePlaceholder(activeFile, placeholder, finalFormattedLink, editor);
-      } 
-
-      //Other links
-      else {
-        const title = await getPageTitle(clipboardText);
-        let formattedText = this.settings.defaultLinkFormat;
-        formattedText = formattedText.replace('{title}', title);
-        formattedText = formattedText.replace('{url}', clipboardText);
-
-        const linkMatch = formattedText.match(/\[(.*?)\]/);  // IMPORTANT: Single bracket is clipboardText
-        let finalFormattedLink = "";
-        if (linkMatch && linkMatch[1]) {
-          const linkContent = linkMatch[1];
-          const firstBracketIndex = formattedText.indexOf(linkMatch[0]);
-          const suffix = formattedText.slice(firstBracketIndex + linkMatch[0].length).trim();
-          finalFormattedLink = `[${linkContent}](${clipboardText})${suffix ? " " + suffix : ""}`;
-        } else {
-          finalFormattedLink = `[${formattedText.trim()}](${clipboardText})`;
-        }
-        this.replacePlaceholder(activeFile, placeholder, finalFormattedLink, editor);
+        this.replacePlaceholder(activeFile, placeholder, formattedText, editor);
+      } else {
+        throw new Error("No client found for link");
       }
     } catch (error) {
       console.error("Failed to format link:", error);
@@ -340,5 +150,3 @@ export default class SmartLinkFormatterPlugin extends Plugin {
     }
   }
 }
-
-export { escapeMarkdownChars };

@@ -1,5 +1,5 @@
 import { requestUrl, Platform } from 'obsidian';
-import { escapeMarkdownChars } from './main';
+import { escapeMarkdownChars } from './utils';
 
 /**
  * Checks if a string is undefined, null, or empty.
