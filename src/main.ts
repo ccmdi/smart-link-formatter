@@ -57,7 +57,7 @@ export default class SmartLinkFormatterPlugin extends Plugin {
             return;
         }
 
-        // Check if pasting adjacent to inline code backticks: `|` or `|`
+        // Check if pasting adjacent to inline code backticks
         const charBefore = cursor.ch > 0 ? line[cursor.ch - 1] : '';
         const charAfter = cursor.ch < line.length ? line[cursor.ch] : '';
         if (charBefore === '`' || charAfter === '`') {

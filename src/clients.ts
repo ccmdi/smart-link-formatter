@@ -62,17 +62,24 @@ export function formatTemplate(
  * @returns Final markdown link
  */
 export function wrapInMarkdownLink(formattedText: string, url: string): string {
-  const linkMatch = formattedText.match(/\[(.*?)\]/);
+  const isEmbed = formattedText.startsWith("!");
+  const textToProcess = isEmbed ? formattedText.substring(1) : formattedText;
+
+  let link;
+  const linkMatch = textToProcess.match(/\[(.*?)\]/);
+
   if (linkMatch && linkMatch[1]) {
     const linkContent = linkMatch[1];
-    const firstBracketIndex = formattedText.indexOf(linkMatch[0]);
-    const suffix = formattedText
+    const firstBracketIndex = textToProcess.indexOf(linkMatch[0]);
+    const suffix = textToProcess
       .slice(firstBracketIndex + linkMatch[0].length)
       .trim();
-    return `[${linkContent}](${url})${suffix ? " " + suffix : ""}`;
+    link = `[${linkContent}](${url})${suffix ? " " + suffix : ""}`;
   } else {
-    return `[${formattedText.trim()}](${url})`;
+    link = `[${textToProcess.trim()}](${url})`;
   }
+
+  return isEmbed ? `!${link}` : link;
 }
 
 class YouTubeClient implements Client {
@@ -318,7 +325,7 @@ class YouTubeMusicClient implements Client {
 class ImageClient implements Client {
   readonly name = "image" as const;
   displayName = "Image";
-  defaultFormat = "![{title}]({url})";
+  defaultFormat = "![{title}]";
 
   getAvailableVariables(): string[] {
     return ["title", "url"];
@@ -347,8 +354,14 @@ class ImageClient implements Client {
     }
   }
 
-  format(metadata: Record<string, string | undefined>, url: string): string {
-    return `![${metadata.title || ""}](${url})`;
+  format(
+    metadata: Record<string, string | undefined>,
+    url: string,
+    plugin: SmartLinkFormatterPlugin
+  ): string {
+    const template = plugin.settings.clientFormats?.[this.name] || this.defaultFormat;
+    const formattedText = formatTemplate(template, metadata, url);
+    return wrapInMarkdownLink(formattedText, url);
   }
 }
 
