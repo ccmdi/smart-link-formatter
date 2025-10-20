@@ -34,13 +34,21 @@
   resize: none;
 }
 
-.flex-container {
-  display: flex;
-  flex-direction: column;
-  height: 400px; /* An explicit height is required */
+
+.smart-link-formatter-tall-textarea-setting {
+  align-items: stretch;
 }
 
-.flex-container textarea {
-  height: 80%; /* This will now work */
-  width: 100%;
+.smart-link-formatter-tall-textarea-setting .setting-item-info {
+  align-self: center;
+}
+
+.smart-link-formatter-tall-textarea-setting .setting-item-control {
+  display: flex;
+}
+
+.smart-link-formatter-tall-textarea-setting .setting-item-control textarea {
+  height: 80%;
+  margin-top: auto;
+  margin-bottom: auto;
 }

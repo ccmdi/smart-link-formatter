@@ -52,7 +52,8 @@ export class LinkFormatterSettingTab extends PluginSettingTab {
 
         for (const client of CLIENTS) {
             const setting = new Setting(containerEl)
-                .setName(`${client.displayName} link format`);
+                .setName(`${client.displayName} link format`)
+                .setClass('smart-link-formatter-tall-textarea-setting');
             
             setting.descEl.appendText('Available variables:');
             const ul = setting.descEl.createEl('ul');
