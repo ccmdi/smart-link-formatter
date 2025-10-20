@@ -45,6 +45,28 @@ export function formatTemplate(
   return formatted;
 }
 
+/**
+ * Wraps formatted text in a markdown link.
+ * If the text contains brackets like [{content}], it uses that as the link text.
+ * Otherwise, it wraps the entire text as the link text.
+ * @param formattedText - The formatted text from template
+ * @param url - The URL to link to
+ * @returns Final markdown link
+ */
+export function wrapInMarkdownLink(formattedText: string, url: string): string {
+  const linkMatch = formattedText.match(/\[(.*?)\]/);
+  if (linkMatch && linkMatch[1]) {
+    const linkContent = linkMatch[1];
+    const firstBracketIndex = formattedText.indexOf(linkMatch[0]);
+    const suffix = formattedText
+      .slice(firstBracketIndex + linkMatch[0].length)
+      .trim();
+    return `[${linkContent}](${url})${suffix ? " " + suffix : ""}`;
+  } else {
+    return `[${formattedText.trim()}](${url})`;
+  }
+}
+
 class YouTubeClient implements Client {
   name = "youtube";
   displayName = "YouTube";
@@ -161,25 +183,9 @@ class YouTubeClient implements Client {
     // Add timestamp to metadata for template formatting
     const extendedMetadata = { ...metadata, timestamp: timestampStr };
 
-    // Get the format template from settings, or use default
     const template = plugin.settings.clientFormats?.[this.name] || this.defaultFormat;
     const formattedText = formatTemplate(template, extendedMetadata, url);
-
-    const linkMatch = formattedText.match(/\[(.*?)\]/); // IMPORTANT: Single bracket is clipboardText
-    let finalFormattedLink = formattedText;
-    if (linkMatch && linkMatch[1]) {
-      const linkContent = linkMatch[1];
-      const firstBracketIndex = formattedText.indexOf(linkMatch[0]);
-      const suffix = formattedText
-        .slice(firstBracketIndex + linkMatch[0].length)
-        .trim();
-      finalFormattedLink = `[${linkContent}](${url})${
-        suffix ? " " + suffix : ""
-      }`;
-    } else {
-      finalFormattedLink = `[${formattedText.trim()}](${url})`;
-    }
-    return finalFormattedLink;
+    return wrapInMarkdownLink(formattedText, url);
   }
 
   matches = (url: string) => {
@@ -283,25 +289,9 @@ class YouTubeMusicClient implements Client {
     url: string,
     plugin: SmartLinkFormatterPlugin
   ): string {
-    // Get the format template from settings, or use default
     const template = plugin.settings.clientFormats?.[this.name] || this.defaultFormat;
     const formattedText = formatTemplate(template, metadata, url);
-
-    const linkMatch = formattedText.match(/\[(.*?)\]/);
-    let finalFormattedLink = formattedText;
-    if (linkMatch && linkMatch[1]) {
-      const linkContent = linkMatch[1];
-      const firstBracketIndex = formattedText.indexOf(linkMatch[0]);
-      const suffix = formattedText
-        .slice(firstBracketIndex + linkMatch[0].length)
-        .trim();
-      finalFormattedLink = `[${linkContent}](${url})${
-        suffix ? " " + suffix : ""
-      }`;
-    } else {
-      finalFormattedLink = `[${formattedText.trim()}](${url})`;
-    }
-    return finalFormattedLink;
+    return wrapInMarkdownLink(formattedText, url);
   }
 
   matches = (url: string) => {
@@ -326,25 +316,9 @@ class DefaultClient implements Client {
         return { title: title };
     }
     format(metadata: Record<string, string | undefined>, url: string, plugin: SmartLinkFormatterPlugin): string {
-        // Get the format template from settings, or use default
         const template = plugin.settings.clientFormats?.[this.name] || this.defaultFormat;
         const formattedText = formatTemplate(template, metadata, url);
-
-        const linkMatch = formattedText.match(/\[(.*?)\]/);
-        let finalFormattedLink = formattedText;
-        if (linkMatch && linkMatch[1]) {
-            const linkContent = linkMatch[1];
-            const firstBracketIndex = formattedText.indexOf(linkMatch[0]);
-            const suffix = formattedText
-                .slice(firstBracketIndex + linkMatch[0].length)
-                .trim();
-            finalFormattedLink = `[${linkContent}](${url})${
-                suffix ? " " + suffix : ""
-            }`;
-        } else {
-            finalFormattedLink = `[${formattedText.trim()}](${url})`;
-        }
-        return finalFormattedLink;
+        return wrapInMarkdownLink(formattedText, url);
     }
     matches(url: string): boolean {
         return true;
