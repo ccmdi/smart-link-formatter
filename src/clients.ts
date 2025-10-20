@@ -4,7 +4,11 @@ import { Notice } from "obsidian";
 import SmartLinkFormatterPlugin from "main";
 import { getPageTitle } from "title-utils";
 
-interface Client {
+export interface Client {
+  name: string; // Unique identifier for the client
+  displayName: string; // Human-readable name for settings UI
+  defaultFormat: string; // Default format template with variables
+  getAvailableVariables: () => string[]; // Returns list of available template variables
   fetchMetadata: (url: string) => Promise<Record<string, string | undefined>>;
   format: (
     metadata: Record<string, string | undefined>,
@@ -14,7 +18,42 @@ interface Client {
   matches: (url: string) => boolean;
 }
 
+/**
+ * Generic template formatter that automatically replaces variables in a template
+ * based on the metadata object keys.
+ * @param template - Template string with {variable} placeholders
+ * @param metadata - Object containing variable values
+ * @param url - The URL being formatted
+ * @returns Formatted string with all variables replaced
+ */
+export function formatTemplate(
+  template: string,
+  metadata: Record<string, string | undefined>,
+  url: string
+): string {
+  let formatted = template;
+
+  // Replace all metadata variables
+  for (const [key, value] of Object.entries(metadata)) {
+    const placeholder = `{${key}}`;
+    formatted = formatted.replace(new RegExp(placeholder, 'g'), value || '');
+  }
+
+  // Always replace {url} with the actual URL
+  formatted = formatted.replace(/{url}/g, url);
+
+  return formatted;
+}
+
 class YouTubeClient implements Client {
+  name = "youtube";
+  displayName = "YouTube";
+  defaultFormat = "[{title}] by {channel}";
+
+  getAvailableVariables(): string[] {
+    return ["title", "channel", "uploader", "duration", "views", "upload_date", "description", "url", "timestamp"];
+  }
+
   async fetchMetadata(
     url: string
   ): Promise<Record<string, string | undefined>> {
@@ -119,28 +158,12 @@ class YouTubeClient implements Client {
           : `@${mins}:${secs.toString().padStart(2, "0")}`;
     }
 
-    let formattedText = plugin.settings.printCommand;
-    formattedText = formattedText.replace("{title}", metadata.title || "");
-    formattedText = formattedText.replace("{channel}", metadata.channel || "");
-    formattedText = formattedText.replace(
-      "{uploader}",
-      metadata.uploader || ""
-    );
-    formattedText = formattedText.replace(
-      "{description}",
-      metadata.description || ""
-    );
-    formattedText = formattedText.replace("{views}", metadata.views || "");
-    formattedText = formattedText.replace(
-      "{duration}",
-      metadata.duration || ""
-    );
-    formattedText = formattedText.replace(
-      "{upload_date}",
-      metadata.upload_date || ""
-    );
-    formattedText = formattedText.replace("{url}", url);
-    formattedText = formattedText.replace("{timestamp}", timestampStr);
+    // Add timestamp to metadata for template formatting
+    const extendedMetadata = { ...metadata, timestamp: timestampStr };
+
+    // Get the format template from settings, or use default
+    const template = plugin.settings.clientFormats?.[this.name] || this.defaultFormat;
+    const formattedText = formatTemplate(template, extendedMetadata, url);
 
     const linkMatch = formattedText.match(/\[(.*?)\]/); // IMPORTANT: Single bracket is clipboardText
     let finalFormattedLink = formattedText;
@@ -180,6 +203,14 @@ class YouTubeClient implements Client {
 }
 
 class YouTubeMusicClient implements Client {
+  name = "youtube-music";
+  displayName = "YouTube Music";
+  defaultFormat = "[{title}] - {artist}";
+
+  getAvailableVariables(): string[] {
+    return ["title", "artist", "duration", "views", "url"];
+  }
+
   async fetchMetadata(
     url: string
   ): Promise<Record<string, string | undefined>> {
@@ -252,11 +283,25 @@ class YouTubeMusicClient implements Client {
     url: string,
     plugin: SmartLinkFormatterPlugin
   ): string {
-    const displayText = metadata.artist
-      ? `${metadata.title} - ${metadata.artist}`
-      : metadata.title;
+    // Get the format template from settings, or use default
+    const template = plugin.settings.clientFormats?.[this.name] || this.defaultFormat;
+    const formattedText = formatTemplate(template, metadata, url);
 
-    return `[${displayText}](${url})`;
+    const linkMatch = formattedText.match(/\[(.*?)\]/);
+    let finalFormattedLink = formattedText;
+    if (linkMatch && linkMatch[1]) {
+      const linkContent = linkMatch[1];
+      const firstBracketIndex = formattedText.indexOf(linkMatch[0]);
+      const suffix = formattedText
+        .slice(firstBracketIndex + linkMatch[0].length)
+        .trim();
+      finalFormattedLink = `[${linkContent}](${url})${
+        suffix ? " " + suffix : ""
+      }`;
+    } else {
+      finalFormattedLink = `[${formattedText.trim()}](${url})`;
+    }
+    return finalFormattedLink;
   }
 
   matches = (url: string) => {
@@ -265,15 +310,41 @@ class YouTubeMusicClient implements Client {
 }
 
 /**
- * Fallback client that matches every link and simply formats the title. 
+ * Fallback client that matches every link and simply formats the title.
  */
 class DefaultClient implements Client {
+    name = "default";
+    displayName = "Default";
+    defaultFormat = "[{title}]";
+
+    getAvailableVariables(): string[] {
+        return ["title", "url"];
+    }
+
     async fetchMetadata(url: string): Promise<Record<string, string | undefined>> {
         const title = await getPageTitle(url);
         return { title: title };
     }
     format(metadata: Record<string, string | undefined>, url: string, plugin: SmartLinkFormatterPlugin): string {
-        return `[${metadata.title}](${url})`;
+        // Get the format template from settings, or use default
+        const template = plugin.settings.clientFormats?.[this.name] || this.defaultFormat;
+        const formattedText = formatTemplate(template, metadata, url);
+
+        const linkMatch = formattedText.match(/\[(.*?)\]/);
+        let finalFormattedLink = formattedText;
+        if (linkMatch && linkMatch[1]) {
+            const linkContent = linkMatch[1];
+            const firstBracketIndex = formattedText.indexOf(linkMatch[0]);
+            const suffix = formattedText
+                .slice(firstBracketIndex + linkMatch[0].length)
+                .trim();
+            finalFormattedLink = `[${linkContent}](${url})${
+                suffix ? " " + suffix : ""
+            }`;
+        } else {
+            finalFormattedLink = `[${formattedText.trim()}](${url})`;
+        }
+        return finalFormattedLink;
     }
     matches(url: string): boolean {
         return true;
