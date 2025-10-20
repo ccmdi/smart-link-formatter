@@ -1,5 +1,5 @@
 import { requestUrl, Platform } from 'obsidian';
-import { escapeMarkdownChars } from './main';
+import { escapeMarkdownChars } from './utils';
 
 /**
  * Checks if a string is undefined, null, or empty.
@@ -8,6 +8,15 @@ import { escapeMarkdownChars } from './main';
  */
 function blank(text: string | null | undefined): boolean {
   return text === undefined || text === null || text === '';
+}
+
+/**
+ * Generates a unique placeholder token.
+ * @returns The unique placeholder token.
+ */
+export function generateUniqueToken(): string {
+  const id = `link-placeholder-${Date.now()}_${Math.floor(Math.random() * 1000000)}`;
+  return `<span class="link-loading" id="${id}">Loading...</span>`; 
 }
 
 /**

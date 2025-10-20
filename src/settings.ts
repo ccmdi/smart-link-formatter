@@ -1,20 +1,18 @@
 import { App, PluginSettingTab, Setting } from "obsidian";
-import SmartLinkFormatterPlugin from "./main";
+import SmartLinkFormatterPlugin from "main";
+import { CLIENTS, ClientName } from "clients";
 
 export interface LinkFormatterSettings {
-    printCommand: string;
     autoLink: boolean;
     blacklistedDomains: string;
-    defaultLinkFormat: string;
+    clientFormats: Partial<Record<ClientName, string>>; // Maps ClientName -> format template
 }
 
 export const DEFAULT_SETTINGS: LinkFormatterSettings = {
-    printCommand: '[{title}] by {channel}',
     autoLink: true,
     blacklistedDomains: '',
-    defaultLinkFormat: '[{title}]({link})',
+    clientFormats: {}
 };
-
 export class LinkFormatterSettingTab extends PluginSettingTab {
     plugin: SmartLinkFormatterPlugin;
 
@@ -36,22 +34,7 @@ export class LinkFormatterSettingTab extends PluginSettingTab {
                     this.plugin.settings.autoLink = value;
                     await this.plugin.saveSettings();
                 }));
-        
-        new Setting(containerEl)
-            .setName('Default link format')
-            .setDesc('Format for non-YouTube links. Use {title} for page title and {link} for URL. Example: [{title}]')
-            .addTextArea(text => text
-                .setPlaceholder('[{title}]')
-                .setValue(this.plugin.settings.defaultLinkFormat)
-                .then(textArea => {
-                    textArea.inputEl.rows = 2;
-                    textArea.inputEl.addClass('smart-link-formatter-setting-textarea');
-                })
-                .onChange(async (value) => {
-                    this.plugin.settings.defaultLinkFormat = value;
-                    await this.plugin.saveSettings();
-                }));
-        
+
         new Setting(containerEl)
             .setName('Blacklisted domains')
             .setDesc('Comma-separated list of domains that should never be auto-formatted. URLs from these domains will be pasted as-is.')
@@ -67,20 +50,30 @@ export class LinkFormatterSettingTab extends PluginSettingTab {
                     await this.plugin.saveSettings();
                 }));
 
-        new Setting(containerEl)
-            .setName('YouTube link format')
-            .setDesc('Customize how YouTube links are formatted. Available variables: {title}, {channel}, {uploader}, {duration}, {views}, {upload_date}, {description}, {url}, {timestamp}. Example: [{title}] by {channel}')
-            .addTextArea(text => text
-                .setPlaceholder(DEFAULT_SETTINGS.printCommand)
-                .setValue(this.plugin.settings.printCommand)
+        for (const client of CLIENTS) {
+            const setting = new Setting(containerEl)
+                .setName(`${client.displayName} link format`)
+                .setClass('smart-link-formatter-tall-textarea-setting');
+            
+            setting.descEl.appendText('Available variables:');
+            const ul = setting.descEl.createEl('ul');
+            for (const v of client.getAvailableVariables()) {
+                ul.createEl('li').createEl('code', { text: `{${v}}` });
+            }
+            const defaultTag = setting.descEl.createEl('span', { text: `Default: ` });
+            defaultTag.createEl('code', { text: client.defaultFormat });
+
+            setting.addTextArea(text => text
+                .setPlaceholder(client.defaultFormat)
+                .setValue(this.plugin.settings.clientFormats[client.name] || client.defaultFormat)
                 .then(textArea => {
-                    textArea.inputEl.rows = 4;
-                    textArea.inputEl.cols = 50;
+                    textArea.inputEl.rows = 2;
                     textArea.inputEl.addClass('smart-link-formatter-setting-textarea');
                 })
                 .onChange(async (value) => {
-                    this.plugin.settings.printCommand = value;
+                    this.plugin.settings.clientFormats[client.name] = value;
                     await this.plugin.saveSettings();
                 }));
+        }
     }
 }

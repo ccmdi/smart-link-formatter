@@ -30,6 +30,25 @@
 }
 
 .smart-link-formatter-setting-textarea {
-  width: 100%;
+  width: 200px;
   resize: none;
+}
+
+
+.smart-link-formatter-tall-textarea-setting {
+  align-items: stretch;
+}
+
+.smart-link-formatter-tall-textarea-setting .setting-item-info {
+  align-self: center;
+}
+
+.smart-link-formatter-tall-textarea-setting .setting-item-control {
+  display: flex;
+}
+
+.smart-link-formatter-tall-textarea-setting .setting-item-control textarea {
+  height: 80%;
+  margin-top: auto;
+  margin-bottom: auto;
 }
