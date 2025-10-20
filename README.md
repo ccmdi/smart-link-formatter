@@ -1,3 +1,4 @@
+# Smart Link Formatter
 A plugin for Obsidian that automatically formats pasted links with metadata.
 
 It has explicit support for:
@@ -6,13 +7,13 @@ It has explicit support for:
 * GitHub
 * Image links
 
-# Features
+## Features
 - Automatically formats pasted links
 - Supports custom formatting for all clients, as well as regular links
 - Blacklist domains to prevent automatic formatting
 - Toggle auto-linking on/off
 
-# Formatting
+## Formatting
 Variables are replaced dynamically by the plugin. The first instance of square brackets `[]` will be a hyperlink for the clipboard content.
 
 For default links, the following variables are available:
@@ -24,9 +25,9 @@ Example format: `[{title}]`
 
 If you need to format a date (e.g. `upload_date`), you can use moment.js date formats: `{upload_date|MMMM Do, YYYY}`
 
-## Custom Formatting
+### Custom Formatting
 
-Clients in the plugin have unique variables you can capture. For instance, when pasting a YouTube link, the following variables are available for formatting:
+Clients in the plugin have unique variables you can capture. For instance, when pasting a **YouTube** link, the following variables are available for formatting:
 
 - `{title}` - Video title
 - `{channel}` - Channel name
