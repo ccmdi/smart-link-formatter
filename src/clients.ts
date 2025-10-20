@@ -5,7 +5,7 @@ import SmartLinkFormatterPlugin from "main";
 import { getPageTitle } from "title-utils";
 
 export interface Client {
-  name: string; // Unique identifier for the client
+  name: ClientName; // Unique identifier for the client
   displayName: string; // Human-readable name for settings UI
   defaultFormat: string; // Default format template with variables
   getAvailableVariables: () => string[]; // Returns list of available template variables
@@ -36,7 +36,7 @@ export function formatTemplate(
   // Replace all metadata variables
   for (const [key, value] of Object.entries(metadata)) {
     const placeholder = `{${key}}`;
-    formatted = formatted.replace(new RegExp(placeholder, 'g'), value || '');
+    formatted = formatted.replace(new RegExp(placeholder, "g"), value || "");
   }
 
   formatted = formatted.replace(/{url}/g, url);
@@ -72,7 +72,17 @@ class YouTubeClient implements Client {
   defaultFormat = "[{title}] by {channel}";
 
   getAvailableVariables(): string[] {
-    return ["title", "channel", "uploader", "duration", "views", "upload_date", "description", "url", "timestamp"];
+    return [
+      "title",
+      "channel",
+      "uploader",
+      "duration",
+      "views",
+      "upload_date",
+      "description",
+      "url",
+      "timestamp",
+    ];
   }
 
   async fetchMetadata(
@@ -298,36 +308,74 @@ class YouTubeMusicClient implements Client {
   };
 }
 
+class ImageClient implements Client {
+  readonly name = "image" as const;
+  displayName = "Image";
+  defaultFormat = "![{title}]({url})";
+
+  getAvailableVariables(): string[] {
+    return ["title", "url"];
+  }
+
+  matches = (url: string) => {
+    return (
+      url.match(/\.(jpg|jpeg|png|gif|bmp|tiff|ico|webp|svg|heic|heif)$/i) !==
+      null
+    );
+  };
+
+  async fetchMetadata(
+    url: string
+  ): Promise<Record<string, string | undefined>> {
+    try {
+      const filename = url.substring(url.lastIndexOf("/") + 1);
+      return {
+        title: filename
+          ? escapeMarkdownChars(decodeURIComponent(filename))
+          : "image",
+      };
+    } catch (error) {
+      console.error("Error parsing image URL:", error);
+      return { title: "image" };
+    }
+  }
+
+  format(metadata: Record<string, string | undefined>, url: string): string {
+    return `![${metadata.title || ""}](${url})`;
+  }
+}
+
 /**
  * Fallback client that matches every link and simply formats the title.
  */
 class DefaultClient implements Client {
-    readonly name = "default" as const;
-    displayName = "Default";
-    defaultFormat = "[{title}]";
+  readonly name = "default" as const;
+  displayName = "Default";
+  defaultFormat = "[{title}]";
 
-    getAvailableVariables(): string[] {
-        return ["title", "url"];
-    }
+  getAvailableVariables(): string[] {
+      return ["title", "url"];
+  }
 
-    async fetchMetadata(url: string): Promise<Record<string, string | undefined>> {
-        const title = await getPageTitle(url);
-        return { title: title };
-    }
-    format(metadata: Record<string, string | undefined>, url: string, plugin: SmartLinkFormatterPlugin): string {
-        const template = plugin.settings.clientFormats?.[this.name] || this.defaultFormat;
-        const formattedText = formatTemplate(template, metadata, url);
-        return wrapInMarkdownLink(formattedText, url);
-    }
-    matches(url: string): boolean {
-        return true;
-    }
+  async fetchMetadata(url: string): Promise<Record<string, string | undefined>> {
+      const title = await getPageTitle(url);
+      return { title: title };
+  }
+  format(metadata: Record<string, string | undefined>, url: string, plugin: SmartLinkFormatterPlugin): string {
+      const template = plugin.settings.clientFormats?.[this.name] || this.defaultFormat;
+      const formattedText = formatTemplate(template, metadata, url);
+      return wrapInMarkdownLink(formattedText, url);
+  }
+  matches(url: string): boolean {
+      return true;
+  }
 }
 
 export const CLIENTS = [
-    new YouTubeClient(),
-    new YouTubeMusicClient(),
-    new DefaultClient()
+  new YouTubeClient(),
+  new YouTubeMusicClient(),
+  new ImageClient(),
+  new DefaultClient(),
 ] as const;
 
-export type ClientName = typeof CLIENTS[number]['name'];
+export type ClientName = (typeof CLIENTS)[number]["name"];
