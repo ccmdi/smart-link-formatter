@@ -11,6 +11,15 @@ function blank(text: string | null | undefined): boolean {
 }
 
 /**
+ * Generates a unique placeholder token.
+ * @returns The unique placeholder token.
+ */
+export function generateUniqueToken(): string {
+  const id = `link-placeholder-${Date.now()}_${Math.floor(Math.random() * 1000000)}`;
+  return `<span class="link-loading" id="${id}">Loading...</span>`; 
+}
+
+/**
  * Extracts the last segment of a URL path.
  * @param url - The URL string.
  * @returns The last segment or a default string like "File" or the original URL on error.

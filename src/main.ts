@@ -5,15 +5,7 @@ import {
   LinkFormatterSettingTab,
 } from "./settings";
 import { CLIENTS } from "clients";
-
-/**
- * Generates a unique placeholder token.
- * @returns The unique placeholder token.
- */
-function generateUniqueToken(): string {
-  const id = `link-placeholder-${Date.now()}_${Math.floor(Math.random() * 1000000)}`;
-  return `<span class="link-loading" id="${id}">Loading...</span>`; 
-}
+import { generateUniqueToken } from "title-utils";
 export default class SmartLinkFormatterPlugin extends Plugin {
   settings: LinkFormatterSettings;
 
@@ -31,7 +23,6 @@ export default class SmartLinkFormatterPlugin extends Plugin {
     );
   }
 
-
   async loadSettings() {
     this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
   }
@@ -44,6 +35,7 @@ export default class SmartLinkFormatterPlugin extends Plugin {
     if (!this.settings.autoLink) return;
     if (!evt.clipboardData) return;
 
+    // Is it a link?
     const clipboardText = evt.clipboardData.getData("text/plain");
     if (!clipboardText.match(/^https?:\/\//)) return;
 

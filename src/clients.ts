@@ -179,11 +179,95 @@ class YouTubeClient implements Client {
   }
 }
 
+class YouTubeMusicClient implements Client {
+  async fetchMetadata(
+    url: string
+  ): Promise<Record<string, string | undefined>> {
+    try {
+      const videoId = this.extractVideoId(url);
+      if (!videoId) {
+        throw new Error("Could not extract video ID from URL");
+      }
+
+      const payload = {
+        videoId: videoId,
+        context: {
+          client: {
+            clientName: "WEB_REMIX",
+            clientVersion: "1.20251015.03.00",
+            hl: "en",
+            gl: "US"
+          }
+        }
+      };
+
+      const response = await requestUrl({
+        url: "https://music.youtube.com/youtubei/v1/player?prettyPrint=false",
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify(payload)
+      });
+
+      const data = JSON.parse(response.text);
+      const videoDetails = data.videoDetails;
+
+      if (videoDetails) {
+        return {
+          title: videoDetails.title ? escapeMarkdownChars(videoDetails.title) : undefined,
+          artist: videoDetails.author ? escapeMarkdownChars(videoDetails.author) : undefined,
+          duration: videoDetails.lengthSeconds
+            ? formatDuration(parseInt(videoDetails.lengthSeconds))
+            : undefined,
+          views: videoDetails.viewCount
+            ? parseInt(videoDetails.viewCount).toLocaleString()
+            : undefined,
+        };
+      }
+    } catch (error) {
+      console.error(
+        `Failed to fetch YouTube Music metadata for ${url}:`,
+        error
+      );
+      new Notice("Failed to fetch YouTube Music data.", 3000);
+    }
+
+    // Fallback
+    return {
+      title: escapeMarkdownChars(url),
+      artist: undefined,
+      duration: undefined,
+      views: undefined,
+    };
+  }
+
+  extractVideoId(url: string): string | null {
+    const urlObj = new URL(url);
+    return urlObj.searchParams.get("v");
+  }
+
+  format(
+    metadata: Record<string, string | undefined>,
+    url: string,
+    plugin: SmartLinkFormatterPlugin
+  ): string {
+    const displayText = metadata.artist
+      ? `${metadata.title} - ${metadata.artist}`
+      : metadata.title;
+
+    return `[${displayText}](${url})`;
+  }
+
+  matches = (url: string) => {
+    return url.match(/^https?:\/\/music\.youtube\.com\//) !== null;
+  };
+}
+
 /**
  * Fallback client that matches every link and simply formats the title. 
  */
 class DefaultClient implements Client {
-
     async fetchMetadata(url: string): Promise<Record<string, string | undefined>> {
         const title = await getPageTitle(url);
         return { title: title };
@@ -195,7 +279,9 @@ class DefaultClient implements Client {
         return true;
     }
 }
+
 export const CLIENTS: Client[] = [
     new YouTubeClient(),
+    new YouTubeMusicClient(),
     new DefaultClient()
 ];
