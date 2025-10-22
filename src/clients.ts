@@ -538,6 +538,76 @@ class TwitterClient implements Client {
   }
 }
 
+class RedditClient implements Client {
+  readonly name = "reddit" as const;
+  displayName = "Reddit";
+  defaultFormat = "[{title}] - r/{subreddit}";
+
+  getAvailableVariables(): string[] {
+    return ["title", "subreddit", "author", "upvotes", "comments", "created_at", "url"];
+  }
+
+  matches = (url: string) => {
+    return /^https?:\/\/(www\.)?reddit\.com\/r\/[\w-]+\/comments\//.test(url);
+  };
+
+  async fetchMetadata(
+    url: string
+  ): Promise<Record<string, string | undefined>> {
+    try {
+      const jsonUrl = url.replace(/\/$/, '') + '.json';
+
+      const response = await requestUrl({
+        url: jsonUrl,
+        method: "GET",
+        headers: {
+          "User-Agent": "Obsidian Smart Link Formatter"
+        }
+      });
+
+      const data = JSON.parse(response.text);
+
+      const postData = data[0]?.data?.children?.[0]?.data;
+
+      if (!postData) {
+        throw new Error("Could not find post data");
+      }
+
+      return {
+        title: postData.title ? escapeMarkdownChars(postData.title) : undefined,
+        subreddit: postData.subreddit ? escapeMarkdownChars(postData.subreddit) : undefined,
+        author: postData.author ? escapeMarkdownChars(postData.author) : undefined,
+        upvotes: postData.ups ? postData.ups.toLocaleString() : undefined,
+        comments: postData.num_comments ? postData.num_comments.toLocaleString() : undefined,
+        created_at: postData.created_utc ? new Date(postData.created_utc * 1000).toISOString() : undefined
+      };
+    } catch (error) {
+      console.error(`Failed to fetch Reddit metadata for ${url}:`, error);
+      new Notice("Failed to fetch Reddit data.", 3000);
+    }
+
+    // Fallback
+    return {
+      title: escapeMarkdownChars(url),
+      subreddit: undefined,
+      author: undefined,
+      upvotes: undefined,
+      comments: undefined,
+      created_at: undefined
+    };
+  }
+
+  format(
+    metadata: Record<string, string | undefined>,
+    url: string,
+    plugin: SmartLinkFormatterPlugin
+  ): string {
+    const template = plugin.settings.clientFormats?.[this.name] || this.defaultFormat;
+    const formattedText = formatTemplate(template, metadata, url);
+    return wrapInMarkdownLink(formattedText, url);
+  }
+}
+
 class GitHubClient implements Client {
   readonly name = "github" as const;
   displayName = "GitHub";
@@ -627,6 +697,7 @@ export const CLIENTS = [
   new YouTubeMusicClient(),
   new ImageClient(),
   new TwitterClient(),
+  new RedditClient(),
   new GitHubClient(),
   new DefaultClient(),
 ] as const;
