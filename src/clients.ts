@@ -365,6 +365,165 @@ class ImageClient implements Client {
   }
 }
 
+class TwitterClient implements Client {
+  readonly name = "twitter" as const;
+  displayName = "Twitter/X";
+  defaultFormat = "[{text}] - @{author}";
+
+  getAvailableVariables(): string[] {
+    return ["text", "author", "name", "likes", "retweets", "replies", "views", "created_at", "url"];
+  }
+
+  matches = (url: string) => {
+    return /^https?:\/\/(twitter\.com|x\.com)\/\w+\/status\/\d+/.test(url);
+  };
+
+  async getGuestToken(): Promise<string> {
+    const response = await requestUrl({
+      url: "https://api.x.com/1.1/guest/activate.json",
+      method: "POST",
+      headers: {
+        "authorization": "Bearer AAAAAAAAAAAAAAAAAAAAANRILgAAAAAAnNwIzUejRCOuH5E6I8xnZz4puTs%3D1Zv7ttfk8LF81IUq16cHjhLTvJu4FA33AGWWjCpTnA"
+      }
+    });
+
+    const data = JSON.parse(response.text);
+    return data.guest_token;
+  }
+
+  async fetchMetadata(
+    url: string
+  ): Promise<Record<string, string | undefined>> {
+    try {
+      const tweetId = this.extractTweetId(url);
+      if (!tweetId) {
+        throw new Error("Could not extract tweet ID from URL");
+      }
+
+      // Get guest token first
+      const guestToken = await this.getGuestToken();
+
+      const variables = {
+        tweetId: tweetId,
+        withCommunity: false,
+        includePromotedContent: false,
+        withVoice: false
+      };
+
+      const features = {
+        creator_subscriptions_tweet_preview_api_enabled: true,
+        premium_content_api_read_enabled: false,
+        communities_web_enable_tweet_community_results_fetch: true,
+        c9s_tweet_anatomy_moderator_badge_enabled: true,
+        responsive_web_grok_analyze_button_fetch_trends_enabled: false,
+        responsive_web_grok_analyze_post_followups_enabled: false,
+        responsive_web_jetfuel_frame: true,
+        responsive_web_grok_share_attachment_enabled: true,
+        articles_preview_enabled: true,
+        responsive_web_edit_tweet_api_enabled: true,
+        graphql_is_translatable_rweb_tweet_is_translatable_enabled: true,
+        view_counts_everywhere_api_enabled: true,
+        longform_notetweets_consumption_enabled: true,
+        responsive_web_twitter_article_tweet_consumption_enabled: true,
+        tweet_awards_web_tipping_enabled: false,
+        responsive_web_grok_show_grok_translated_post: false,
+        responsive_web_grok_analysis_button_from_backend: true,
+        creator_subscriptions_quote_tweet_preview_enabled: false,
+        freedom_of_speech_not_reach_fetch_enabled: true,
+        standardized_nudges_misinfo: true,
+        tweet_with_visibility_results_prefer_gql_limited_actions_policy_enabled: true,
+        longform_notetweets_rich_text_read_enabled: true,
+        longform_notetweets_inline_media_enabled: true,
+        payments_enabled: false,
+        profile_label_improvements_pcf_label_in_post_enabled: true,
+        responsive_web_profile_redirect_enabled: false,
+        rweb_tipjar_consumption_enabled: true,
+        verified_phone_label_enabled: false,
+        responsive_web_grok_image_annotation_enabled: true,
+        responsive_web_grok_imagine_annotation_enabled: true,
+        responsive_web_grok_community_note_auto_translation_is_enabled: false,
+        responsive_web_graphql_skip_user_profile_image_extensions_enabled: false,
+        responsive_web_graphql_timeline_navigation_enabled: true,
+        responsive_web_enhance_cards_enabled: false
+      };
+
+      const fieldToggles = {
+        withArticleRichContentState: true,
+        withArticlePlainText: false,
+        withGrokAnalyze: false,
+        withDisallowedReplyControls: true,
+        withAuxiliaryUserLabels: true
+      };
+
+      const apiUrl = `https://x.com/i/api/graphql/jGOLj4UQ6l5z9uUKfhqEHA/TweetResultByRestId?variables=${encodeURIComponent(JSON.stringify(variables))}&features=${encodeURIComponent(JSON.stringify(features))}&fieldToggles=${encodeURIComponent(JSON.stringify(fieldToggles))}`;
+
+      const response = await requestUrl({
+        url: apiUrl,
+        method: "GET",
+        headers: {
+          "authorization": "Bearer AAAAAAAAAAAAAAAAAAAAANRILgAAAAAAnNwIzUejRCOuH5E6I8xnZz4puTs%3D1Zv7ttfk8LF81IUq16cHjhLTvJu4FA33AGWWjCpTnA",
+          "x-guest-token": guestToken,
+          "x-twitter-active-user": "yes",
+          "x-twitter-client-language": "en"
+        }
+      });
+
+      const data = JSON.parse(response.text);
+      const result = data?.data?.tweetResult?.result;
+
+      if (!result) {
+        throw new Error("Tweet result not found");
+      }
+
+      const legacy = result.legacy;
+      const userCore = result.core?.user_results?.result?.legacy;
+      const username = result.core?.user_results?.result?.legacy?.screen_name;
+      const authorName = result.core?.user_results?.result?.legacy?.name;
+
+      return {
+        text: legacy?.full_text ? escapeMarkdownChars(legacy.full_text) : undefined,
+        author: authorName ? escapeMarkdownChars(authorName) : undefined,
+        name: username ? escapeMarkdownChars(username) : undefined,
+        likes: legacy?.favorite_count ? legacy.favorite_count.toLocaleString() : undefined,
+        retweets: legacy?.retweet_count ? legacy.retweet_count.toLocaleString() : undefined,
+        replies: legacy?.reply_count ? legacy.reply_count.toLocaleString() : undefined,
+        views: result.views?.count ? parseInt(result.views.count).toLocaleString() : undefined,
+        created_at: legacy?.created_at ? escapeMarkdownChars(legacy.created_at) : undefined
+      };
+    } catch (error) {
+      console.error(`Failed to fetch Twitter metadata for ${url}:`, error);
+      new Notice("Failed to fetch Twitter data.", 3000);
+    }
+
+    // Fallback
+    return {
+      text: escapeMarkdownChars(url),
+      author: undefined,
+      name: undefined,
+      likes: undefined,
+      retweets: undefined,
+      replies: undefined,
+      views: undefined,
+      created_at: undefined
+    };
+  }
+
+  extractTweetId(url: string): string | null {
+    const match = url.match(/status\/(\d+)/);
+    return match ? match[1] : null;
+  }
+
+  format(
+    metadata: Record<string, string | undefined>,
+    url: string,
+    plugin: SmartLinkFormatterPlugin
+  ): string {
+    const template = plugin.settings.clientFormats?.[this.name] || this.defaultFormat;
+    const formattedText = formatTemplate(template, metadata, url);
+    return wrapInMarkdownLink(formattedText, url);
+  }
+}
+
 class GitHubClient implements Client {
   readonly name = "github" as const;
   displayName = "GitHub";
@@ -453,6 +612,7 @@ export const CLIENTS = [
   new YouTubeClient(),
   new YouTubeMusicClient(),
   new ImageClient(),
+  new TwitterClient(),
   new GitHubClient(),
   new DefaultClient(),
 ] as const;
