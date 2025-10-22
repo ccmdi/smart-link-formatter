@@ -3,6 +3,8 @@ A plugin for Obsidian that automatically formats pasted links with metadata.
 
 It has explicit support for:
 * YouTube
+* Twitter/X
+* Reddit
 * YouTube Music
 * GitHub
 * Image links
