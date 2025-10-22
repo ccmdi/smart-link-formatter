@@ -370,6 +370,11 @@ class TwitterClient implements Client {
   displayName = "Twitter/X";
   defaultFormat = "[{text}] - @{author}";
 
+  private queryId: string | null = null;
+  private bearerToken: string | null = null;
+  private features: any = null;
+  private fieldToggles: any = null;
+
   getAvailableVariables(): string[] {
     return ["text", "author", "name", "likes", "retweets", "replies", "views", "created_at", "url"];
   }
@@ -378,12 +383,64 @@ class TwitterClient implements Client {
     return /^https?:\/\/(twitter\.com|x\.com)\/\w+\/status\/\d+/.test(url);
   };
 
+  async loadTwitterAPIConfig(): Promise<void> {
+    try {
+      const graphqlResponse = await requestUrl({
+        url: "https://raw.githubusercontent.com/fa0311/TwitterInternalAPIDocument/master/docs/json/GraphQL.json",
+        method: "GET"
+      });
+      const graphqlData = JSON.parse(graphqlResponse.text);
+
+      const endpoint = graphqlData.find((item: any) =>
+        item.exports?.operationName === "TweetResultByRestId"
+      );
+
+      if (endpoint) {
+        this.queryId = endpoint.exports.queryId;
+
+        const metadata = endpoint.exports.metadata;
+        if (metadata) {
+          if (metadata.featureSwitch) {
+            this.features = {};
+            for (const [key, val] of Object.entries(metadata.featureSwitch)) {
+              const value = (val as any).value;
+              this.features[key] = value === "true" ? true : value === "false" ? false : value;
+            }
+          }
+
+          if (metadata.fieldToggles) {
+            this.fieldToggles = {};
+            for (const toggle of metadata.fieldToggles) {
+              this.fieldToggles[toggle] = true;
+            }
+          }
+        }
+      }
+
+      const apiResponse = await requestUrl({
+        url: "https://raw.githubusercontent.com/fa0311/TwitterInternalAPIDocument/master/docs/deck/json/API.json",
+        method: "GET"
+      });
+      const apiData = JSON.parse(apiResponse.text);
+      this.bearerToken = apiData.header?.authorization;
+
+    } catch (error) {
+      console.error("Failed to load Twitter API config from GitHub:", error);
+      this.queryId = "jGOLj4UQ6l5z9uUKfhqEHA";
+      this.bearerToken = "Bearer AAAAAAAAAAAAAAAAAAAAANRILgAAAAAAnNwIzUejRCOuH5E6I8xnZz4puTs%3D1Zv7ttfk8LF81IUq16cHjhLTvJu4FA33AGWWjCpTnA";
+    }
+  }
+
   async getGuestToken(): Promise<string> {
+    if (!this.bearerToken) {
+      await this.loadTwitterAPIConfig();
+    }
+
     const response = await requestUrl({
       url: "https://api.x.com/1.1/guest/activate.json",
       method: "POST",
       headers: {
-        "authorization": "Bearer AAAAAAAAAAAAAAAAAAAAANRILgAAAAAAnNwIzUejRCOuH5E6I8xnZz4puTs%3D1Zv7ttfk8LF81IUq16cHjhLTvJu4FA33AGWWjCpTnA"
+        "authorization": this.bearerToken!
       }
     });
 
@@ -395,6 +452,10 @@ class TwitterClient implements Client {
     url: string
   ): Promise<Record<string, string | undefined>> {
     try {
+      if (!this.queryId || !this.bearerToken) {
+        await this.loadTwitterAPIConfig();
+      }
+
       const tweetId = this.extractTweetId(url);
       if (!tweetId) {
         throw new Error("Could not extract tweet ID from URL");
@@ -409,58 +470,13 @@ class TwitterClient implements Client {
         withVoice: false
       };
 
-      const features = {
-        creator_subscriptions_tweet_preview_api_enabled: true,
-        premium_content_api_read_enabled: false,
-        communities_web_enable_tweet_community_results_fetch: true,
-        c9s_tweet_anatomy_moderator_badge_enabled: true,
-        responsive_web_grok_analyze_button_fetch_trends_enabled: false,
-        responsive_web_grok_analyze_post_followups_enabled: false,
-        responsive_web_jetfuel_frame: true,
-        responsive_web_grok_share_attachment_enabled: true,
-        articles_preview_enabled: true,
-        responsive_web_edit_tweet_api_enabled: true,
-        graphql_is_translatable_rweb_tweet_is_translatable_enabled: true,
-        view_counts_everywhere_api_enabled: true,
-        longform_notetweets_consumption_enabled: true,
-        responsive_web_twitter_article_tweet_consumption_enabled: true,
-        tweet_awards_web_tipping_enabled: false,
-        responsive_web_grok_show_grok_translated_post: false,
-        responsive_web_grok_analysis_button_from_backend: true,
-        creator_subscriptions_quote_tweet_preview_enabled: false,
-        freedom_of_speech_not_reach_fetch_enabled: true,
-        standardized_nudges_misinfo: true,
-        tweet_with_visibility_results_prefer_gql_limited_actions_policy_enabled: true,
-        longform_notetweets_rich_text_read_enabled: true,
-        longform_notetweets_inline_media_enabled: true,
-        payments_enabled: false,
-        profile_label_improvements_pcf_label_in_post_enabled: true,
-        responsive_web_profile_redirect_enabled: false,
-        rweb_tipjar_consumption_enabled: true,
-        verified_phone_label_enabled: false,
-        responsive_web_grok_image_annotation_enabled: true,
-        responsive_web_grok_imagine_annotation_enabled: true,
-        responsive_web_grok_community_note_auto_translation_is_enabled: false,
-        responsive_web_graphql_skip_user_profile_image_extensions_enabled: false,
-        responsive_web_graphql_timeline_navigation_enabled: true,
-        responsive_web_enhance_cards_enabled: false
-      };
-
-      const fieldToggles = {
-        withArticleRichContentState: true,
-        withArticlePlainText: false,
-        withGrokAnalyze: false,
-        withDisallowedReplyControls: true,
-        withAuxiliaryUserLabels: true
-      };
-
-      const apiUrl = `https://x.com/i/api/graphql/jGOLj4UQ6l5z9uUKfhqEHA/TweetResultByRestId?variables=${encodeURIComponent(JSON.stringify(variables))}&features=${encodeURIComponent(JSON.stringify(features))}&fieldToggles=${encodeURIComponent(JSON.stringify(fieldToggles))}`;
+      const apiUrl = `https://x.com/i/api/graphql/${this.queryId}/TweetResultByRestId?variables=${encodeURIComponent(JSON.stringify(variables))}&features=${encodeURIComponent(JSON.stringify(this.features))}&fieldToggles=${encodeURIComponent(JSON.stringify(this.fieldToggles))}`;
 
       const response = await requestUrl({
         url: apiUrl,
         method: "GET",
         headers: {
-          "authorization": "Bearer AAAAAAAAAAAAAAAAAAAAANRILgAAAAAAnNwIzUejRCOuH5E6I8xnZz4puTs%3D1Zv7ttfk8LF81IUq16cHjhLTvJu4FA33AGWWjCpTnA",
+          "authorization": this.bearerToken!,
           "x-guest-token": guestToken,
           "x-twitter-active-user": "yes",
           "x-twitter-client-language": "en"
