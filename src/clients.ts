@@ -44,7 +44,7 @@ export function formatTemplate(
       return '';
     }
 
-    const dateFields = ['upload_date'];
+    const dateFields = ['upload_date', 'created_at'];
     if (format && dateFields.includes(variable) && moment(value).isValid()) {
       return moment(value).format(format);
     }
@@ -365,6 +365,249 @@ class ImageClient implements Client {
   }
 }
 
+class TwitterClient implements Client {
+  readonly name = "twitter" as const;
+  displayName = "Twitter/X";
+  defaultFormat = "[{text}] - @{author}";
+
+  private queryId: string | null = null;
+  private bearerToken: string | null = null;
+  private features: any = null;
+  private fieldToggles: any = null;
+
+  getAvailableVariables(): string[] {
+    return ["text", "author", "name", "likes", "retweets", "replies", "views", "created_at", "url"];
+  }
+
+  matches = (url: string) => {
+    return /^https?:\/\/(twitter\.com|x\.com)\/\w+\/status\/\d+/.test(url);
+  };
+
+  async loadTwitterAPIConfig(): Promise<void> {
+    try {
+      const graphqlResponse = await requestUrl({
+        url: "https://raw.githubusercontent.com/fa0311/TwitterInternalAPIDocument/master/docs/json/GraphQL.json",
+        method: "GET"
+      });
+      const graphqlData = JSON.parse(graphqlResponse.text);
+
+      const endpoint = graphqlData.find((item: any) =>
+        item.exports?.operationName === "TweetResultByRestId"
+      );
+
+      if (endpoint) {
+        this.queryId = endpoint.exports.queryId;
+
+        const metadata = endpoint.exports.metadata;
+        if (metadata) {
+          if (metadata.featureSwitch) {
+            this.features = {};
+            for (const [key, val] of Object.entries(metadata.featureSwitch)) {
+              const value = (val as any).value;
+              this.features[key] = value === "true" ? true : value === "false" ? false : value;
+            }
+          }
+
+          if (metadata.fieldToggles) {
+            this.fieldToggles = {};
+            for (const toggle of metadata.fieldToggles) {
+              this.fieldToggles[toggle] = true;
+            }
+          }
+        }
+      }
+
+      const apiResponse = await requestUrl({
+        url: "https://raw.githubusercontent.com/fa0311/TwitterInternalAPIDocument/master/docs/deck/json/API.json",
+        method: "GET"
+      });
+      const apiData = JSON.parse(apiResponse.text);
+      this.bearerToken = apiData.header?.authorization;
+
+    } catch (error) {
+      console.error("Failed to load Twitter API config from GitHub:", error);
+      this.queryId = "jGOLj4UQ6l5z9uUKfhqEHA";
+      this.bearerToken = "Bearer AAAAAAAAAAAAAAAAAAAAANRILgAAAAAAnNwIzUejRCOuH5E6I8xnZz4puTs%3D1Zv7ttfk8LF81IUq16cHjhLTvJu4FA33AGWWjCpTnA";
+    }
+  }
+
+  async getGuestToken(): Promise<string> {
+    if (!this.bearerToken) {
+      await this.loadTwitterAPIConfig();
+    }
+
+    const response = await requestUrl({
+      url: "https://api.x.com/1.1/guest/activate.json",
+      method: "POST",
+      headers: {
+        "authorization": this.bearerToken!
+      }
+    });
+
+    const data = JSON.parse(response.text);
+    return data.guest_token;
+  }
+
+  async fetchMetadata(
+    url: string
+  ): Promise<Record<string, string | undefined>> {
+    try {
+      if (!this.queryId || !this.bearerToken) {
+        await this.loadTwitterAPIConfig();
+      }
+
+      const tweetId = this.extractTweetId(url);
+      if (!tweetId) {
+        throw new Error("Could not extract tweet ID from URL");
+      }
+
+      const guestToken = await this.getGuestToken();
+
+      const variables = {
+        tweetId: tweetId,
+        withCommunity: false,
+        includePromotedContent: false,
+        withVoice: false
+      };
+
+      const apiUrl = `https://x.com/i/api/graphql/${this.queryId}/TweetResultByRestId?variables=${encodeURIComponent(JSON.stringify(variables))}&features=${encodeURIComponent(JSON.stringify(this.features))}&fieldToggles=${encodeURIComponent(JSON.stringify(this.fieldToggles))}`;
+
+      const response = await requestUrl({
+        url: apiUrl,
+        method: "GET",
+        headers: {
+          "authorization": this.bearerToken!,
+          "x-guest-token": guestToken,
+          "x-twitter-active-user": "yes",
+          "x-twitter-client-language": "en"
+        }
+      });
+
+      const data = JSON.parse(response.text);
+      const result = data?.data?.tweetResult?.result;
+
+      if (!result) {
+        throw new Error("Tweet result not found");
+      }
+
+      const legacy = result.legacy;
+      const username = result.core.user_results.result.core.screen_name;
+      const authorName = result.core.user_results.result.core.name;
+
+      return {
+        text: legacy?.full_text ? escapeMarkdownChars(legacy.full_text) : undefined,
+        author: username ? escapeMarkdownChars(username) : undefined,
+        name: authorName ? escapeMarkdownChars(authorName) : undefined,
+        likes: legacy?.favorite_count,
+        retweets: legacy?.retweet_count,
+        replies: legacy?.reply_count,
+        views: result.views?.count ? parseInt(result.views.count).toLocaleString() : undefined,
+        created_at: legacy?.created_at ? escapeMarkdownChars(legacy.created_at) : undefined
+      };
+    } catch (error) {
+      console.error(`Failed to fetch Twitter metadata for ${url}:`, error);
+      new Notice("Failed to fetch Twitter data.", 3000);
+    }
+
+    // Fallback
+    return {
+      text: escapeMarkdownChars(url),
+      author: undefined,
+      name: undefined,
+      likes: undefined,
+      retweets: undefined,
+      replies: undefined,
+      views: undefined,
+      created_at: undefined
+    };
+  }
+
+  extractTweetId(url: string): string | null {
+    const match = url.match(/status\/(\d+)/);
+    return match ? match[1] : null;
+  }
+
+  format(
+    metadata: Record<string, string | undefined>,
+    url: string,
+    plugin: SmartLinkFormatterPlugin
+  ): string {
+    const template = plugin.settings.clientFormats?.[this.name] || this.defaultFormat;
+    const formattedText = formatTemplate(template, metadata, url);
+    return wrapInMarkdownLink(formattedText, url);
+  }
+}
+
+class RedditClient implements Client {
+  readonly name = "reddit" as const;
+  displayName = "Reddit";
+  defaultFormat = "[{title}] - r/{subreddit}";
+
+  getAvailableVariables(): string[] {
+    return ["title", "subreddit", "author", "upvotes", "comments", "created_at", "url"];
+  }
+
+  matches = (url: string) => {
+    return /^https?:\/\/(www\.)?reddit\.com\/r\/[\w-]+\/comments\//.test(url);
+  };
+
+  async fetchMetadata(
+    url: string
+  ): Promise<Record<string, string | undefined>> {
+    try {
+      const jsonUrl = url.replace(/\/$/, '') + '.json';
+
+      const response = await requestUrl({
+        url: jsonUrl,
+        method: "GET",
+        headers: {
+          "User-Agent": "Obsidian Smart Link Formatter"
+        }
+      });
+
+      const data = JSON.parse(response.text);
+
+      const postData = data[0]?.data?.children?.[0]?.data;
+
+      if (!postData) {
+        throw new Error("Could not find post data");
+      }
+
+      return {
+        title: postData.title ? escapeMarkdownChars(postData.title) : undefined,
+        subreddit: postData.subreddit ? escapeMarkdownChars(postData.subreddit) : undefined,
+        author: postData.author ? escapeMarkdownChars(postData.author) : undefined,
+        upvotes: postData.ups ? postData.ups.toLocaleString() : undefined,
+        comments: postData.num_comments ? postData.num_comments.toLocaleString() : undefined,
+        created_at: postData.created_utc ? new Date(postData.created_utc * 1000).toISOString() : undefined
+      };
+    } catch (error) {
+      console.error(`Failed to fetch Reddit metadata for ${url}:`, error);
+      new Notice("Failed to fetch Reddit data.", 3000);
+    }
+
+    // Fallback
+    return {
+      title: escapeMarkdownChars(url),
+      subreddit: undefined,
+      author: undefined,
+      upvotes: undefined,
+      comments: undefined,
+      created_at: undefined
+    };
+  }
+
+  format(
+    metadata: Record<string, string | undefined>,
+    url: string,
+    plugin: SmartLinkFormatterPlugin
+  ): string {
+    const template = plugin.settings.clientFormats?.[this.name] || this.defaultFormat;
+    const formattedText = formatTemplate(template, metadata, url);
+    return wrapInMarkdownLink(formattedText, url);
+  }
+}
+
 class GitHubClient implements Client {
   readonly name = "github" as const;
   displayName = "GitHub";
@@ -453,6 +696,8 @@ export const CLIENTS = [
   new YouTubeClient(),
   new YouTubeMusicClient(),
   new ImageClient(),
+  new TwitterClient(),
+  new RedditClient(),
   new GitHubClient(),
   new DefaultClient(),
 ] as const;
