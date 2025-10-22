@@ -44,7 +44,7 @@ export function formatTemplate(
       return '';
     }
 
-    const dateFields = ['upload_date'];
+    const dateFields = ['upload_date', 'created_at'];
     if (format && dateFields.includes(variable) && moment(value).isValid()) {
       return moment(value).format(format);
     }
@@ -400,7 +400,6 @@ class TwitterClient implements Client {
         throw new Error("Could not extract tweet ID from URL");
       }
 
-      // Get guest token first
       const guestToken = await this.getGuestToken();
 
       const variables = {
@@ -476,17 +475,16 @@ class TwitterClient implements Client {
       }
 
       const legacy = result.legacy;
-      const userCore = result.core?.user_results?.result?.legacy;
-      const username = result.core?.user_results?.result?.legacy?.screen_name;
-      const authorName = result.core?.user_results?.result?.legacy?.name;
+      const username = result.core.user_results.result.core.screen_name;
+      const authorName = result.core.user_results.result.core.name;
 
       return {
         text: legacy?.full_text ? escapeMarkdownChars(legacy.full_text) : undefined,
-        author: authorName ? escapeMarkdownChars(authorName) : undefined,
-        name: username ? escapeMarkdownChars(username) : undefined,
-        likes: legacy?.favorite_count ? legacy.favorite_count.toLocaleString() : undefined,
-        retweets: legacy?.retweet_count ? legacy.retweet_count.toLocaleString() : undefined,
-        replies: legacy?.reply_count ? legacy.reply_count.toLocaleString() : undefined,
+        author: username ? escapeMarkdownChars(username) : undefined,
+        name: authorName ? escapeMarkdownChars(authorName) : undefined,
+        likes: legacy?.favorite_count,
+        retweets: legacy?.retweet_count,
+        replies: legacy?.reply_count,
         views: result.views?.count ? parseInt(result.views.count).toLocaleString() : undefined,
         created_at: legacy?.created_at ? escapeMarkdownChars(legacy.created_at) : undefined
       };
