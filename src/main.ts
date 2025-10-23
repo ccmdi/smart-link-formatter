@@ -7,6 +7,7 @@ import {
 import { CLIENTS } from "clients";
 import { generateUniqueToken } from "title-utils";
 import { isLink } from "utils";
+import { FailureMode } from "settings";
 
 const BUFFER = '\u200B';
 const generatePlaceholder = (placeholder: string) => { return placeholder + BUFFER }
@@ -97,8 +98,9 @@ export default class SmartLinkFormatterPlugin extends Plugin {
     } catch (error) {
       console.error("Failed to format link:", error);
       new Notice("Failed to format link");
-      const errorFormattedText = `[Failed to fetch title](${clipboardText})`;
-      this.replacePlaceholder(placeholder, errorFormattedText, editor);
+
+      const failureText = FailureMode.format(this.settings.failureMode, clipboardText);
+      this.replacePlaceholder(placeholder, failureText, editor);
     }
   }
   

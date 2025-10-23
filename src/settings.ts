@@ -4,12 +4,29 @@ import { CLIENTS, ClientName } from "clients";
 
 export interface LinkFormatterSettings {
     autoLink: boolean;
+    failureMode: FailureMode;
     blacklistedDomains: string;
     clientFormats: Partial<Record<ClientName, string>>; // Maps ClientName -> format template
 }
 
+export enum FailureMode {
+    Alert = 'alert',
+    Revert = 'revert'
+}
+
+export namespace FailureMode {
+    export function format(mode: FailureMode, text: string): string {
+        if (mode === FailureMode.Alert) {
+            return `[Failed to fetch title](${text})`;
+        } else {
+            return text;
+        }
+    }
+}
+
 export const DEFAULT_SETTINGS: LinkFormatterSettings = {
     autoLink: true,
+    failureMode: FailureMode.Revert,
     blacklistedDomains: '',
     clientFormats: {}
 };
@@ -32,6 +49,18 @@ export class LinkFormatterSettingTab extends PluginSettingTab {
                 .setValue(this.plugin.settings.autoLink)
                 .onChange(async (value) => {
                     this.plugin.settings.autoLink = value;
+                    await this.plugin.saveSettings();
+                }));
+        
+        new Setting(containerEl)
+            .setName('Failure mode')
+            .setDesc('What to do when a link fails to fetch. "Revert" pastes the original URL. "Alert" shows [Failed to fetch title](url).')
+            .addDropdown(dropdown => dropdown
+                .addOption(FailureMode.Revert, 'Revert to plain URL')
+                .addOption(FailureMode.Alert, 'Show failure message')
+                .setValue(this.plugin.settings.failureMode)
+                .onChange(async (value: FailureMode) => {
+                    this.plugin.settings.failureMode = value;
                     await this.plugin.saveSettings();
                 }));
 
