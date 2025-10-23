@@ -33,7 +33,6 @@ export default class SmartLinkFormatterPlugin extends Plugin {
 
     this.registerEvent(
       this.app.workspace.on("file-open", (file) => {
-        console.log(file)
         if (file) {
           this.cleanupOrphanedPlaceholders();
         }
