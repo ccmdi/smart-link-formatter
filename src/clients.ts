@@ -56,7 +56,6 @@ export function formatTemplate(
 /**
  * Wraps formatted text in a markdown link.
  * If the text contains brackets like [{content}], it uses that as the link text.
- * Otherwise, it wraps the entire text as the link text.
  * @param formattedText - The formatted text from template
  * @param url - The URL to link to
  * @returns Final markdown link
@@ -66,7 +65,7 @@ export function wrapInMarkdownLink(formattedText: string, url: string): string {
   const textToProcess = isEmbed ? formattedText.substring(1) : formattedText;
 
   let link;
-  const linkMatch = textToProcess.match(/\[(.*?)\]/);
+  const linkMatch = textToProcess.match(/(?<!\\)\[(.*?)(?<!\\)\]/);
 
   if (linkMatch && linkMatch[1]) {
     const linkContent = linkMatch[1];
@@ -76,7 +75,7 @@ export function wrapInMarkdownLink(formattedText: string, url: string): string {
       .trim();
     link = `[${linkContent}](${url})${suffix ? " " + suffix : ""}`;
   } else {
-    link = `[${textToProcess.trim()}](${url})`;
+    link = textToProcess.trim();
   }
 
   return isEmbed ? `!${link}` : link;
