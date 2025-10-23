@@ -247,7 +247,6 @@ export default class SmartLinkFormatterPlugin extends Plugin {
             const startPos = editor.offsetToPos(editorContent.indexOf(placeholder));
             const endPos = editor.offsetToPos(editorContent.indexOf(placeholder) + placeholder.length);
             editor.replaceRange(newText, startPos, endPos);
-            this.activePlaceholders.delete(placeholder);
         } else {
              console.warn("Smart Link Formatter: Placeholder not found in editor content.");
         }
@@ -255,5 +254,7 @@ export default class SmartLinkFormatterPlugin extends Plugin {
         console.error("Smart Link Formatter: Failed to replace placeholder.", error);
         new Notice("Error updating link in file.");
     }
+    
+    this.activePlaceholders.delete(placeholder);
   }
 }
