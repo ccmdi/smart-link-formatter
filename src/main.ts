@@ -30,6 +30,47 @@ export default class SmartLinkFormatterPlugin extends Plugin {
         }
       )
     );
+
+    this.registerEvent(
+      this.app.workspace.on("file-open", (file) => {
+        console.log(file)
+        if (file) {
+          this.cleanupOrphanedPlaceholders();
+        }
+      })
+    );
+
+    this.cleanupOrphanedPlaceholders(); 
+  }
+
+  private cleanupOrphanedPlaceholders() {
+    //TODO: use editor
+    const activeFile = this.app.workspace.getActiveFile();
+    if (!activeFile) return;
+
+    this.app.vault.read(activeFile).then(content => {
+      const placeholderPattern = /<span class="link-loading" id="(link-placeholder-[^"]+)"(?:\s+url="([^"]*)")?>Loading\.\.\.<\/span>\u200B/g;
+      const matches = content.matchAll(placeholderPattern);
+      let cleanedContent = content;
+      let foundOrphans = false;
+
+      for (const match of matches) {
+        const fullMatch = match[0];
+        const placeholderId = match[1];
+        const url = match[2] || '';
+        
+        if (!this.activePlaceholders.has(fullMatch)) {
+          foundOrphans = true;
+          
+          const inactivePlaceholder = `<span class="link-loading-inactive" id="${placeholderId}" url="${url}">Failed to load</span>`;
+          cleanedContent = cleanedContent.replace(fullMatch, inactivePlaceholder);
+        }
+      }
+
+      if (foundOrphans) {
+        this.app.vault.modify(activeFile, cleanedContent);
+      }
+    });
   }
 
   async loadSettings() {
