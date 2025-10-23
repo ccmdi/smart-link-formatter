@@ -61,7 +61,7 @@ export default class SmartLinkFormatterPlugin extends Plugin {
         if (!this.activePlaceholders.has(fullMatch)) {
           foundOrphans = true;
           
-          const inactivePlaceholder = `<span class="link-loading-inactive" id="${placeholderId}" url="${url}">Failed to load</span>`;
+          const inactivePlaceholder = `<span class="link-loading-inactive" id="${placeholderId}" url="${url}">Failed to resolve</span>`;
           cleanedContent = cleanedContent.replace(fullMatch, inactivePlaceholder);
         }
       }
