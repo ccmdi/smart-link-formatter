@@ -1,4 +1,4 @@
-import { Plugin, Editor, Notice, requestUrl, MarkdownView, TFile } from "obsidian";
+import { Plugin, Editor, Notice } from "obsidian";
 import {
   LinkFormatterSettings,
   DEFAULT_SETTINGS,
@@ -7,7 +7,7 @@ import {
 import { CLIENTS } from "clients";
 import { generateUniqueToken } from "title-utils";
 import { isLink } from "utils";
-import { FailureMode } from "settings";
+import { FailureMode } from "types/failure-mode";
 
 const BUFFER = '\u200B';
 const generatePlaceholder = (placeholder: string) => { return placeholder + BUFFER }

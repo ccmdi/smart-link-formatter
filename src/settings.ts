@@ -1,27 +1,13 @@
 import { App, PluginSettingTab, Setting } from "obsidian";
 import SmartLinkFormatterPlugin from "main";
 import { CLIENTS, ClientName } from "clients";
+import { FailureMode } from "types/failure-mode"
 
 export interface LinkFormatterSettings {
     autoLink: boolean;
     failureMode: FailureMode;
     blacklistedDomains: string;
     clientFormats: Partial<Record<ClientName, string>>; // Maps ClientName -> format template
-}
-
-export enum FailureMode {
-    Alert = 'alert',
-    Revert = 'revert'
-}
-
-export namespace FailureMode {
-    export function format(mode: FailureMode, text: string): string {
-        if (mode === FailureMode.Alert) {
-            return `[Failed to fetch title](${text})`;
-        } else {
-            return text;
-        }
-    }
 }
 
 export const DEFAULT_SETTINGS: LinkFormatterSettings = {
