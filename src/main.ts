@@ -10,6 +10,9 @@ import { isLink } from "utils";
 
 const BUFFER = '\u200B';
 const generatePlaceholder = (placeholder: string) => { return placeholder + BUFFER }
+const TIMEOUT_MS = 10000
+
+
 export default class SmartLinkFormatterPlugin extends Plugin {
   settings: LinkFormatterSettings;
 
@@ -73,10 +76,18 @@ export default class SmartLinkFormatterPlugin extends Plugin {
       return;
     }
 
+    const timeoutPromise = new Promise((_, reject) => 
+      setTimeout(() => reject(new Error('Fetch timeout')), TIMEOUT_MS)
+    );
+
     try {
       const client = CLIENTS.find(client => client.matches(clipboardText));
       if (client) {
-        const metadata = await client.fetchMetadata(clipboardText);
+        const metadata = await Promise.race([
+          client.fetchMetadata(clipboardText),
+          timeoutPromise
+        ]) as Record<string, string | undefined>;
+        
         const formattedText = client.format(metadata, clipboardText, this);
         
         this.replacePlaceholder(placeholder, formattedText, editor);
