@@ -7,6 +7,9 @@ import {
 import { CLIENTS } from "clients";
 import { generateUniqueToken } from "title-utils";
 import { isLink } from "utils";
+
+const BUFFER = '\u200B';
+const generatePlaceholder = (placeholder: string) => { return placeholder + BUFFER }
 export default class SmartLinkFormatterPlugin extends Plugin {
   settings: LinkFormatterSettings;
 
@@ -43,10 +46,12 @@ export default class SmartLinkFormatterPlugin extends Plugin {
     evt.preventDefault();
     if (!this.shouldReplace(editor, clipboardText)) return;
 
-    const placeholder = generateUniqueToken();
+    const token = generateUniqueToken();
+    const placeholder = generatePlaceholder(token);
+
     const selectionStartCursor = editor.getCursor('from');
     const startOffset = editor.posToOffset(selectionStartCursor); 
-    editor.replaceSelection(placeholder); 
+    editor.replaceSelection(placeholder + BUFFER); 
     const placeholderStartPos = editor.offsetToPos(startOffset);
     const placeholderEndPos = editor.offsetToPos(startOffset + placeholder.length);
     editor.setCursor(placeholderEndPos);
