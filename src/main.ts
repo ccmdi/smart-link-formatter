@@ -16,6 +16,7 @@ const TIMEOUT_MS = 10000
 
 export default class SmartLinkFormatterPlugin extends Plugin {
   settings: LinkFormatterSettings;
+  private activePlaceholders: Set<string> = new Set();
 
   async onload() {
     await this.loadSettings();
@@ -50,8 +51,9 @@ export default class SmartLinkFormatterPlugin extends Plugin {
     evt.preventDefault();
     if (!this.shouldReplace(editor, clipboardText)) return;
 
-    const token = generateUniqueToken();
+    const token = generateUniqueToken(clipboardText);
     const placeholder = generatePlaceholder(token);
+    this.activePlaceholders.add(placeholder);
 
     const selectionStartCursor = editor.getCursor('from');
     const startOffset = editor.posToOffset(selectionStartCursor); 
@@ -205,6 +207,7 @@ export default class SmartLinkFormatterPlugin extends Plugin {
             const startPos = editor.offsetToPos(editorContent.indexOf(placeholder));
             const endPos = editor.offsetToPos(editorContent.indexOf(placeholder) + placeholder.length);
             editor.replaceRange(newText, startPos, endPos);
+            this.activePlaceholders.delete(placeholder);
         } else {
              console.warn("Smart Link Formatter: Placeholder not found in editor content.");
         }

@@ -14,9 +14,9 @@ function blank(text: string | null | undefined): boolean {
  * Generates a unique placeholder token.
  * @returns The unique placeholder token.
  */
-export function generateUniqueToken(): string {
+export function generateUniqueToken(url: string): string {
   const id = `link-placeholder-${Date.now()}_${Math.floor(Math.random() * 1000000)}`;
-  return `<span class="link-loading" id="${id}">Loading...</span>`; 
+  return `<span class="link-loading" id="${id}" ${url ? `url="${url}"` : ''}>Loading...</span>`; 
 }
 
 /**
