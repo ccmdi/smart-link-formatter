@@ -8,6 +8,7 @@ import { CLIENTS } from "clients";
 import { generateUniqueToken } from "title-utils";
 import { isLink } from "utils";
 import { FailureMode } from "types/failure-mode";
+import { MarkdownView } from "obsidian"
 
 const BUFFER = '\u200B';
 const generatePlaceholder = (placeholder: string) => { return placeholder + BUFFER }
@@ -43,33 +44,33 @@ export default class SmartLinkFormatterPlugin extends Plugin {
   }
 
   private cleanupOrphanedPlaceholders() {
-    //TODO: use editor
-    const activeFile = this.app.workspace.getActiveFile();
-    if (!activeFile) return;
+    const activeView = this.app.workspace.getActiveViewOfType(MarkdownView);
+    if (!activeView || !activeView.editor) return;
 
-    this.app.vault.read(activeFile).then(content => {
-      const placeholderPattern = /<span class="link-loading" id="(link-placeholder-[^"]+)"(?:\s+url="([^"]*)")?>Loading\.\.\.<\/span>\u200B/g;
-      const matches = content.matchAll(placeholderPattern);
-      let cleanedContent = content;
-      let foundOrphans = false;
+    const editor = activeView.editor;
+    const content = editor.getValue();
+    
+    const placeholderPattern = /<span class="link-loading" id="(link-placeholder-[^"]+)"(?:\s+url="([^"]*)")?>Loading\.\.\.<\/span>\u200B/g;
+    const matches = content.matchAll(placeholderPattern);
+    let cleanedContent = content;
+    let foundOrphans = false;
 
-      for (const match of matches) {
-        const fullMatch = match[0];
-        const placeholderId = match[1];
-        const url = match[2] || '';
+    for (const match of matches) {
+      const fullMatch = match[0];
+      const placeholderId = match[1];
+      const url = match[2] || '';
+      
+      if (!this.activePlaceholders.has(fullMatch)) {
+        foundOrphans = true;
         
-        if (!this.activePlaceholders.has(fullMatch)) {
-          foundOrphans = true;
-          
-          const inactivePlaceholder = `<span class="link-loading-inactive" id="${placeholderId}" url="${url}">Failed to resolve</span>`;
-          cleanedContent = cleanedContent.replace(fullMatch, inactivePlaceholder);
-        }
+        const inactivePlaceholder = `<span class="link-loading-inactive" id="${placeholderId}" url="${url}">Failed to resolve</span>`;
+        cleanedContent = cleanedContent.replace(fullMatch, inactivePlaceholder);
       }
+    }
 
-      if (foundOrphans) {
-        this.app.vault.modify(activeFile, cleanedContent);
-      }
-    });
+    if (foundOrphans) {
+      editor.setValue(cleanedContent);
+    }
   }
 
   async loadSettings() {
