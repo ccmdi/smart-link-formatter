@@ -98,7 +98,7 @@ export default class SmartLinkFormatterPlugin extends Plugin {
 
     const selectionStartCursor = editor.getCursor('from');
     const startOffset = editor.posToOffset(selectionStartCursor); 
-    editor.replaceSelection(placeholder + BUFFER); 
+    editor.replaceSelection(placeholder); 
     const placeholderStartPos = editor.offsetToPos(startOffset);
     const placeholderEndPos = editor.offsetToPos(startOffset + placeholder.length);
     editor.setCursor(placeholderEndPos);
