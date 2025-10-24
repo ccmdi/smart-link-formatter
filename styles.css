@@ -29,6 +29,15 @@
   }
 }
 
+.link-loading-inactive {
+  border-radius: 4px;
+  padding: 2px 6px;
+  color: var(--text-error);
+  opacity: 0.8;
+  font-size: 0.9em;
+  font-style: italic;
+}
+
 .smart-link-formatter-setting-textarea {
   width: 200px;
   resize: none;

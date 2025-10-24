@@ -22,6 +22,12 @@ export interface Client {
 /**
  * Generic template formatter that automatically replaces variables in a template
  * based on the metadata object keys.
+ *
+ * Supports:
+ * - Basic variables: {variable}
+ * - Date formatting: {date_field|YYYY-MM-DD}
+ * - Conditional formatting: {field?show_if_present:show_if_absent}
+ *
  * @param template - Template string with {variable} placeholders
  * @param metadata - Object containing variable values
  * @param url - The URL being formatted
@@ -32,31 +38,65 @@ export function formatTemplate(
   metadata: Record<string, string | undefined>,
   url: string
 ): string {
-  return template.replace(/{([^{}]+?)}/g, (match, key) => {
-    const [variable, format] = key.split('|').map((s: string) => s.trim());
+  let result = template;
+  let previousResult = '';
 
-    if (variable === "url") {
-      return url;
-    }
+  while (result !== previousResult) {
+    previousResult = result;
 
-    const value = metadata[variable];
-    if (value === undefined) {
-      return '';
-    }
+    result = result.replace(/{([^{}]+?)}/g, (match, key) => {
+      // Check for conditional: {field?if_present:if_absent}
+      const conditionalMatch = key.match(/^([^?|]+)\?(.*)$/);
+      if (conditionalMatch) {
+        const fieldName = conditionalMatch[1].trim();
+        const branches = conditionalMatch[2];
 
-    const dateFields = ['upload_date', 'created_at'];
-    if (format && dateFields.includes(variable) && moment(value).isValid()) {
-      return moment(value).format(format);
-    }
+        const fieldValue = fieldName === "url" ? url : metadata[fieldName];
+        const isPresent = fieldValue !== undefined && fieldValue !== '';
 
-    return String(value);
-  });
+        if (!isPresent) {
+          for (let i = 1; i < branches.length; i++) {
+            if (branches[i] === ':' && branches[i - 1] !== '\\') {
+              return branches.substring(i + 1).replace(/\\:/g, ':');
+            }
+          }
+          return '';
+        }
+
+        for (let i = 1; i < branches.length; i++) {
+          if (branches[i] === ':' && branches[i - 1] !== '\\') {
+            return branches.substring(0, i).replace(/\\:/g, ':');
+          }
+        }
+        return branches.replace(/\\:/g, ':');
+      }
+
+      const [variable, format] = key.split('|').map((s: string) => s.trim());
+
+      if (variable === "url") {
+        return url;
+      }
+
+      const value = metadata[variable];
+      if (value === undefined) {
+        return '';
+      }
+
+      const dateFields = ['upload_date', 'created_at'];
+      if (format && dateFields.includes(variable) && moment(value).isValid()) {
+        return moment(value).format(format);
+      }
+
+      return String(value);
+    });
+  }
+
+  return result;
 }
 
 /**
  * Wraps formatted text in a markdown link.
  * If the text contains brackets like [{content}], it uses that as the link text.
- * Otherwise, it wraps the entire text as the link text.
  * @param formattedText - The formatted text from template
  * @param url - The URL to link to
  * @returns Final markdown link
@@ -66,17 +106,16 @@ export function wrapInMarkdownLink(formattedText: string, url: string): string {
   const textToProcess = isEmbed ? formattedText.substring(1) : formattedText;
 
   let link;
-  const linkMatch = textToProcess.match(/\[(.*?)\]/);
+  const linkMatch = textToProcess.match(/(?<!\\)\[(.*?)(?<!\\)\]/);
 
   if (linkMatch && linkMatch[1]) {
     const linkContent = linkMatch[1];
     const firstBracketIndex = textToProcess.indexOf(linkMatch[0]);
     const suffix = textToProcess
-      .slice(firstBracketIndex + linkMatch[0].length)
-      .trim();
-    link = `[${linkContent}](${url})${suffix ? " " + suffix : ""}`;
+      .slice(firstBracketIndex + linkMatch[0].length);
+    link = `[${linkContent}](${url})${suffix}`;
   } else {
-    link = `[${textToProcess.trim()}](${url})`;
+    link = textToProcess.trim();
   }
 
   return isEmbed ? `!${link}` : link;
@@ -639,7 +678,6 @@ class GitHubClient implements Client {
         [repo, description] = repo.split(": ");
         owner = owner.split("- ")[1];
       }
-      console.log(owner, "|", repo, "|", description);
 
       return {
         owner: owner ? escapeMarkdownChars(owner) : undefined,

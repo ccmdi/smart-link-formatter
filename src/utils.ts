@@ -7,6 +7,10 @@ export function escapeMarkdownChars(text: string): string {
   return text.replace(/([\[\]|*_`\\])/g, "\\$1");
 }
 
+export function isLink(text: string): boolean {
+  return !!text.match(/^https?:\/\//)
+}
+
 /**
  * Formats a date string to a more readable format (YYYY/MM/DD).
  * @param dateStr - The date string to format.
