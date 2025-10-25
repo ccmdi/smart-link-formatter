@@ -163,21 +163,18 @@ export default class SmartLinkFormatterPlugin extends Plugin {
     
     const potentialLinkMatch = textBeforeCursor.match(/\[.*?\]\($/);
     if (potentialLinkMatch && charAfterCursor === ')') {
-        editor.replaceSelection(text);
         return false;
     }
 
     // Check if cursor is inside inline code (between backticks)
     const backticksBefore = (textBeforeCursor.match(/`/g) || []).length;
     if (backticksBefore % 2 === 1) {
-        editor.replaceSelection(text);
         return false;
     }
 
     // Check if pasting adjacent to inline code backticks
     const charBeforeCursor = cursor.ch > 0 ? line[cursor.ch - 1] : '';
     if (charBeforeCursor === '`' || charAfterCursor === '`') {
-        editor.replaceSelection(text);
         return false;
     }
 
@@ -191,13 +188,11 @@ export default class SmartLinkFormatterPlugin extends Plugin {
         }
     }
     if (inCodeBlock) {
-        editor.replaceSelection(text);
         return false;
     }
 
     // Check if inside YAML frontmatter
     if (cursor.line === 0 && line.trim() === '---') {
-        editor.replaceSelection(text);
         return false;
     }
     if (cursor.line > 0) {
@@ -212,7 +207,6 @@ export default class SmartLinkFormatterPlugin extends Plugin {
             }
         }
         if (inFrontmatter) {
-            editor.replaceSelection(text);
             return false;
         }
     }
@@ -222,7 +216,6 @@ export default class SmartLinkFormatterPlugin extends Plugin {
     const openComments = (fullTextBeforeCursor.match(/<!--/g) || []).length;
     const closeComments = (fullTextBeforeCursor.match(/-->/g) || []).length;
     if (openComments > closeComments) {
-        editor.replaceSelection(text);
         return false;
     }
 
