@@ -89,8 +89,8 @@ export default class SmartLinkFormatterPlugin extends Plugin {
     const activeFile = this.app.workspace.getActiveFile();
     if (!activeFile) return;
 
-    evt.preventDefault();
     if (!this.shouldReplace(editor, clipboardText)) return;
+    evt.preventDefault();
 
     const token = generateUniqueToken(clipboardText);
     const placeholder = generatePlaceholder(token);
