@@ -61,3 +61,39 @@
   margin-top: auto;
   margin-bottom: auto;
 }
+
+/* Tab navigation styles */
+.smart-link-formatter-nav {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 20px;
+  padding-bottom: 0;
+}
+
+.smart-link-formatter-nav button {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  padding: 8px 16px;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 500;
+  border-bottom: 2px solid transparent;
+  transition: all 0.2s ease;
+  margin-bottom: -1px;
+}
+
+.smart-link-formatter-nav button:hover {
+  color: var(--text-normal);
+  background-color: var(--background-modifier-hover);
+}
+
+.smart-link-formatter-nav button.smart-link-formatter-tab-active {
+  color: var(--interactive-accent);
+  border-bottom-color: var(--interactive-accent);
+}
+
+.smart-link-formatter-section-divider {
+  height: 1px;
+  margin-bottom: 20px;
+}
