@@ -98,11 +98,7 @@ export default class SmartLinkFormatterPlugin extends Plugin {
     const activeFile = this.app.workspace.getActiveFile();
     if (!activeFile) return;
 
-    // If paste into selection is enabled and there's a selection, let other plugins/default behavior handle it
-    if (this.settings.pasteIntoSelection && editor.somethingSelected()) {
-      return; // Don't prevent default, let other handlers process this
-    }
-
+    if (this.shouldOverride(editor)) return;
     if (!this.shouldReplace(editor, clipboardText)) return;
     evt.preventDefault();
 
@@ -234,6 +230,13 @@ export default class SmartLinkFormatterPlugin extends Plugin {
     }
 
     return true;
+  }
+
+  private shouldOverride(editor: Editor): boolean {
+    if (this.settings.pasteIntoSelection && editor.somethingSelected()) {
+      return true;
+    }
+    return false;
   }
 
    /** 
