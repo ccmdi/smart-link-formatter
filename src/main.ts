@@ -12,6 +12,7 @@ import { MarkdownView } from "obsidian"
 
 const BUFFER = '\u200B';
 const generatePlaceholder = (placeholder: string) => { return placeholder + BUFFER }
+const placeholderPattern = /<span class="link-loading" id="(link-placeholder-[^"]+)"(?:\s+url="([^"]*)")?>Loading\.\.\.<\/span>\u200B/g; //todo
 const TIMEOUT_MS = 10000
 
 
@@ -40,7 +41,6 @@ export default class SmartLinkFormatterPlugin extends Plugin {
       })
     );
 
-    // Add command to manually format URL at cursor
     this.addCommand({
       id: 'format-link-at-cursor',
       name: 'Format link at cursor',
@@ -59,7 +59,6 @@ export default class SmartLinkFormatterPlugin extends Plugin {
     const editor = activeView.editor;
     const content = editor.getValue();
     
-    const placeholderPattern = /<span class="link-loading" id="(link-placeholder-[^"]+)"(?:\s+url="([^"]*)")?>Loading\.\.\.<\/span>\u200B/g;
     const matches = content.matchAll(placeholderPattern);
     let cleanedContent = content;
     let foundOrphans = false;
@@ -103,6 +102,10 @@ export default class SmartLinkFormatterPlugin extends Plugin {
     if (this.isBlacklisted(clipboardText)) return;
     evt.preventDefault();
 
+    this.handleFormat(clipboardText, editor);
+  }
+
+  private async handleFormat(clipboardText: string, editor: Editor) {
     const token = generateUniqueToken(clipboardText);
     const placeholder = generatePlaceholder(token);
     this.activePlaceholders.add(placeholder);
@@ -279,7 +282,6 @@ export default class SmartLinkFormatterPlugin extends Plugin {
     const cursor = editor.getCursor();
     const line = editor.getLine(cursor.line);
 
-    // Extract URL at cursor position
     const urlInfo = extractUrlAtCursor(line, cursor.ch);
     if (!urlInfo) {
       new Notice("No URL found at cursor position");
@@ -288,64 +290,15 @@ export default class SmartLinkFormatterPlugin extends Plugin {
 
     const { url, start, end } = urlInfo;
 
-    // Create placeholder
-    const token = generateUniqueToken(url);
-    const placeholder = generatePlaceholder(token);
-    this.activePlaceholders.add(placeholder);
-
-    // Replace URL with placeholder
-    const startPos = { line: cursor.line, ch: start };
-    const endPos = { line: cursor.line, ch: end };
-    editor.replaceRange(placeholder, startPos, endPos);
-
-    // Calculate new positions after placeholder insertion
-    const placeholderStartPos = startPos;
-    const placeholderEndPos = { line: cursor.line, ch: start + placeholder.length };
-
-    // Blacklist check
-    try {
-      const urlObj = new URL(url);
-      const blacklist = this.settings.blacklistedDomains
-        .split(",")
-        .map((domain) => domain.trim())
-        .filter((domain) => domain.length > 0);
-      if (blacklist.some((domain) => urlObj.hostname.includes(domain))) {
-        editor.replaceRange(url, placeholderStartPos, placeholderEndPos);
-        this.activePlaceholders.delete(placeholder);
-        new Notice("URL is in blacklisted domains");
-        return;
-      }
-    } catch (e) {
-      console.error("Failed to parse URL for blacklist check:", e);
-      editor.replaceRange(url, placeholderStartPos, placeholderEndPos);
-      this.activePlaceholders.delete(placeholder);
+    if (this.isBlacklisted(url)) {
+      new Notice("URL is in blacklisted domains");
       return;
     }
 
-    const timeoutPromise = new Promise((_, reject) =>
-      setTimeout(() => reject(new Error('Fetch timeout')), TIMEOUT_MS)
-    );
+    const startPos = { line: cursor.line, ch: start };
+    const endPos = { line: cursor.line, ch: end };
+    editor.setSelection(startPos, endPos);
 
-    try {
-      const client = CLIENTS.find(client => client.matches(url));
-      if (client) {
-        const metadata = await Promise.race([
-          client.fetchMetadata(url),
-          timeoutPromise
-        ]) as Record<string, string | undefined>;
-
-        const formattedText = client.format(metadata, url, this);
-
-        this.replacePlaceholder(placeholder, formattedText, editor);
-      } else {
-        throw new Error("No client found for link");
-      }
-    } catch (error) {
-      console.error("Failed to format link:", error);
-      new Notice("Failed to format link");
-
-      const failureText = FailureMode.format(this.settings.failureMode, url);
-      this.replacePlaceholder(placeholder, failureText, editor);
-    }
+    this.handleFormat(url, editor);
   }
 }
