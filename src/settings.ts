@@ -42,6 +42,7 @@ export class LinkFormatterSettingTab extends PluginSettingTab {
             this.display();
         };
 
+        //todo: consider 'formats'
         const clientsTab = navContainer.createEl('button', {
             text: 'Clients',
             cls: this.activeSection === 'clients' ? 'smart-link-formatter-tab-active' : ''
@@ -144,7 +145,7 @@ export class LinkFormatterSettingTab extends PluginSettingTab {
 
         new Setting(containerEl)
             .setName('Paste URL into selection')
-            .setDesc('Allows pasting a URL over selected text will allow other plugins or default behavior to handle it, instead of auto-formatting.')
+            .setDesc('Allows pasting a URL over selected text, which will allow other plugins or default behavior to handle it instead of auto-formatting.')
             .addToggle(toggle => toggle
                 .setValue(this.plugin.settings.pasteIntoSelection)
                 .onChange(async (value) => {

@@ -100,6 +100,7 @@ export default class SmartLinkFormatterPlugin extends Plugin {
 
     if (this.shouldOverride(editor)) return;
     if (!this.shouldReplace(editor, clipboardText)) return;
+    if (this.isBlacklisted(clipboardText)) return;
     evt.preventDefault();
 
     const token = generateUniqueToken(clipboardText);
@@ -112,23 +113,6 @@ export default class SmartLinkFormatterPlugin extends Plugin {
     const placeholderStartPos = editor.offsetToPos(startOffset);
     const placeholderEndPos = editor.offsetToPos(startOffset + placeholder.length);
     editor.setCursor(placeholderEndPos);
-
-    // Blacklist check
-    try {
-      const url = new URL(clipboardText);
-      const blacklist = this.settings.blacklistedDomains
-        .split(",")
-        .map((domain) => domain.trim())
-        .filter((domain) => domain.length > 0);
-      if (blacklist.some((domain) => url.hostname.includes(domain))) {
-        editor.replaceRange(clipboardText, placeholderStartPos, placeholderEndPos);
-        return;
-      }
-    } catch (e) {
-      console.error("Failed to parse URL for blacklist check:", e);
-       editor.replaceRange(clipboardText, placeholderStartPos, placeholderEndPos);
-      return;
-    }
 
     const timeoutPromise = new Promise((_, reject) => 
       setTimeout(() => reject(new Error('Fetch timeout')), TIMEOUT_MS)
@@ -236,6 +220,24 @@ export default class SmartLinkFormatterPlugin extends Plugin {
     if (this.settings.pasteIntoSelection && editor.somethingSelected()) {
       return true;
     }
+    return false;
+  }
+
+  private isBlacklisted(text: string): boolean {
+    try {
+      const url = new URL(text);
+      const blacklist = this.settings.blacklistedDomains
+        .split(",")
+        .map((domain) => domain.trim())
+        .filter((domain) => domain.length > 0);
+      if (blacklist.some((domain) => url.hostname.includes(domain))) {
+        return true;
+      }
+    } catch (e) {
+      console.error("Failed to parse URL for blacklist check:", e);
+      return true;
+    }
+
     return false;
   }
 
