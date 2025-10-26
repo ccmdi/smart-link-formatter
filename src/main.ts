@@ -12,7 +12,7 @@ import { MarkdownView } from "obsidian"
 
 const BUFFER = '\u200B';
 const generatePlaceholder = (placeholder: string) => { return placeholder + BUFFER }
-const placeholderPattern = /<span class="link-loading" id="(link-placeholder-[^"]+)"(?:\s+url="([^"]*)")?>Loading\.\.\.<\/span>\u200B/g; //todo
+const placeholderPattern = /<span class="link-loading" id="(link-placeholder-[^"]+)"(?:\s+url="([^"]*)")?>Loading\.\.\.<\/span>(?:\u200B+)?/g; //todo
 const TIMEOUT_MS = 10000
 
 
@@ -58,26 +58,30 @@ export default class SmartLinkFormatterPlugin extends Plugin {
 
     const editor = activeView.editor;
     const content = editor.getValue();
-    
+
     const matches = content.matchAll(placeholderPattern);
-    let cleanedContent = content;
-    let foundOrphans = false;
+    const orphanedMatches: Array<{ match: RegExpMatchArray; index: number }> = [];
 
     for (const match of matches) {
       const fullMatch = match[0];
-      const placeholderId = match[1];
-      const url = match[2] || '';
-      
-      if (!this.activePlaceholders.has(fullMatch)) {
-        foundOrphans = true;
-        
-        const inactivePlaceholder = `<span class="link-loading-inactive" id="${placeholderId}" url="${url}">Failed to resolve</span>`;
-        cleanedContent = cleanedContent.replace(fullMatch, inactivePlaceholder);
+
+      if (!this.activePlaceholders.has(fullMatch) && match.index !== undefined) {
+        orphanedMatches.push({ match, index: match.index });
       }
     }
 
-    if (foundOrphans) {
-      editor.setValue(cleanedContent);
+    if (orphanedMatches.length === 0) return;
+
+    for (let i = orphanedMatches.length - 1; i >= 0; i--) {
+      const { match, index } = orphanedMatches[i];
+      const fullMatch = match[0];
+      const placeholderId = match[1];
+      const url = match[2] || '';
+
+      const inactivePlaceholder = `<span class="link-loading-inactive" id="${placeholderId}" url="${url}">Failed to resolve</span>`;
+      const startPos = editor.offsetToPos(index);
+      const endPos = editor.offsetToPos(index + fullMatch.length);
+      editor.replaceRange(inactivePlaceholder, startPos, endPos);
     }
   }
 
@@ -116,6 +120,8 @@ export default class SmartLinkFormatterPlugin extends Plugin {
       setTimeout(() => reject(new Error('Fetch timeout')), TIMEOUT_MS)
     );
 
+    let didReplace = false;
+
     try {
       const client = CLIENTS.find(client => client.matches(clipboardText));
       if (client) {
@@ -126,7 +132,7 @@ export default class SmartLinkFormatterPlugin extends Plugin {
         
         const formattedText = client.format(metadata, clipboardText, this);
         
-        this.replacePlaceholder(placeholder, formattedText, editor);
+        didReplace = this.replacePlaceholder(placeholder, formattedText, editor);
       } else {
         throw new Error("No client found for link");
       }
@@ -135,7 +141,11 @@ export default class SmartLinkFormatterPlugin extends Plugin {
       new Notice("Failed to format link");
 
       const failureText = FailureMode.format(this.settings.failureMode, clipboardText);
-      this.replacePlaceholder(placeholder, failureText, editor);
+      didReplace = this.replacePlaceholder(placeholder, failureText, editor);
+    }
+
+    if (!didReplace) {
+      this.cleanupOrphanedPlaceholders();
     }
   }
   
@@ -246,11 +256,13 @@ export default class SmartLinkFormatterPlugin extends Plugin {
    * @param newText - The new text to replace the placeholder with.
    * @param editor - The editor to replace the placeholder in.
    */
-  private async replacePlaceholder(
+  private replacePlaceholder(
     placeholder: string,
     newText: string,
     editor: Editor
-  ) {
+  ): boolean {
+    let didReplace = false;
+
     try {
         const editorContent = editor.getValue();
         
@@ -258,15 +270,19 @@ export default class SmartLinkFormatterPlugin extends Plugin {
             const startPos = editor.offsetToPos(editorContent.indexOf(placeholder));
             const endPos = editor.offsetToPos(editorContent.indexOf(placeholder) + placeholder.length);
             editor.replaceRange(newText, startPos, endPos);
+            didReplace = true;
         } else {
              console.warn("Smart Link Formatter: Placeholder not found in editor content.");
+             didReplace = false;
         }
     } catch (error) {
         console.error("Smart Link Formatter: Failed to replace placeholder.", error);
         new Notice("Error updating link in file.");
+        didReplace = false;
     }
     
     this.activePlaceholders.delete(placeholder);
+    return didReplace;
   }
 
   /**
