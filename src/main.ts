@@ -13,7 +13,6 @@ import { MarkdownView } from "obsidian"
 const BUFFER = '\u200B';
 const generatePlaceholder = (placeholder: string) => { return placeholder + BUFFER }
 const placeholderPattern = /<span class="link-loading" id="(link-placeholder-[^"]+)"(?:\s+url="([^"]*)")?>Loading\.\.\.<\/span>(?:\u200B+)?/g; //todo
-const TIMEOUT_MS = 10000
 
 
 export default class SmartLinkFormatterPlugin extends Plugin {
@@ -116,8 +115,8 @@ export default class SmartLinkFormatterPlugin extends Plugin {
 
     editor.replaceSelection(placeholder);
 
-    const timeoutPromise = new Promise((_, reject) => 
-      setTimeout(() => reject(new Error('Fetch timeout')), TIMEOUT_MS)
+    const timeoutPromise = new Promise((_, reject) =>
+      setTimeout(() => reject(new Error('Fetch timeout')), this.settings.timeoutSeconds * 1000)
     );
 
     let didReplace = false;
@@ -150,6 +149,7 @@ export default class SmartLinkFormatterPlugin extends Plugin {
   }
   
   private shouldReplace(editor: Editor, text: string): boolean {
+    //todo: rules for settings
     if (!isLink(text)) return false;
 
     const cursor = editor.getCursor();

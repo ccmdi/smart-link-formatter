@@ -1,12 +1,13 @@
 import { App, PluginSettingTab, Setting } from "obsidian";
 import SmartLinkFormatterPlugin from "main";
 import { CLIENTS, ClientName } from "clients";
-import { FailureMode } from "types/failure-mode"
+import { FailureMode } from "types/failure-mode";
 
 export interface LinkFormatterSettings {
     autoLink: boolean;
     pasteIntoSelection: boolean;
     failureMode: FailureMode;
+    timeoutSeconds: number;
     blacklistedDomains: string;
     clientFormats: Partial<Record<ClientName, string>>; // Maps ClientName -> format template
 }
@@ -15,6 +16,7 @@ export const DEFAULT_SETTINGS: LinkFormatterSettings = {
     autoLink: true,
     pasteIntoSelection: false,
     failureMode: FailureMode.Revert,
+    timeoutSeconds: 10,
     blacklistedDomains: '',
     clientFormats: {}
 };
@@ -96,6 +98,30 @@ export class LinkFormatterSettingTab extends PluginSettingTab {
                     this.plugin.settings.failureMode = value;
                     await this.plugin.saveSettings();
                 }));
+
+        new Setting(containerEl)
+            .setName('Fetch timeout')
+            .setDesc('Maximum time (in seconds) to wait for page metadata. (3-60s)')
+            .addText(text => {
+                text.inputEl.type = 'number';
+                text.inputEl.min = '3';
+                text.inputEl.max = '60';
+                text.inputEl.step = '1';
+            
+                text
+                    .setPlaceholder('10')
+                    .setValue(String(this.plugin.settings.timeoutSeconds))
+                    .onChange(async (value) => {
+                        const numValue = parseInt(value);
+                        if (!isNaN(numValue) && numValue >= 3 && numValue <= 60) {
+                            this.plugin.settings.timeoutSeconds = numValue;
+                            await this.plugin.saveSettings();
+                            text.inputEl.removeAttribute('aria-label');
+                        } else {
+                            text.inputEl.addClass('smart-link-formatter-invalid');
+                        }
+                    });
+            });
     }
 
     private displayClientSettings(containerEl: HTMLElement): void {
