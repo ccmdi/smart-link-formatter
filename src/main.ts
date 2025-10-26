@@ -110,12 +110,7 @@ export default class SmartLinkFormatterPlugin extends Plugin {
     const placeholder = generatePlaceholder(token);
     this.activePlaceholders.add(placeholder);
 
-    const selectionStartCursor = editor.getCursor('from');
-    const startOffset = editor.posToOffset(selectionStartCursor);
     editor.replaceSelection(placeholder);
-    const placeholderStartPos = editor.offsetToPos(startOffset);
-    const placeholderEndPos = editor.offsetToPos(startOffset + placeholder.length);
-    editor.setCursor(placeholderEndPos);
 
     const timeoutPromise = new Promise((_, reject) => 
       setTimeout(() => reject(new Error('Fetch timeout')), TIMEOUT_MS)
