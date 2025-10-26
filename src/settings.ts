@@ -127,16 +127,6 @@ export class LinkFormatterSettingTab extends PluginSettingTab {
 
     private displayOverrideSettings(containerEl: HTMLElement): void {
         new Setting(containerEl)
-            .setName('Paste URL into selection')
-            .setDesc('Allows pasting a URL over selected text will allow other plugins or default behavior to handle it, instead of auto-formatting.')
-            .addToggle(toggle => toggle
-                .setValue(this.plugin.settings.pasteIntoSelection)
-                .onChange(async (value) => {
-                    this.plugin.settings.pasteIntoSelection = value;
-                    await this.plugin.saveSettings();
-                }));
-
-        new Setting(containerEl)
             .setName('Blacklisted domains')
             .setDesc('Comma-separated list of domains that should never be auto-formatted. URLs from these domains will be pasted as-is.')
             .addTextArea(text => text
@@ -148,6 +138,17 @@ export class LinkFormatterSettingTab extends PluginSettingTab {
                 })
                 .onChange(async (value) => {
                     this.plugin.settings.blacklistedDomains = value;
+                    await this.plugin.saveSettings();
+                }));
+        
+
+        new Setting(containerEl)
+            .setName('Paste URL into selection')
+            .setDesc('Allows pasting a URL over selected text will allow other plugins or default behavior to handle it, instead of auto-formatting.')
+            .addToggle(toggle => toggle
+                .setValue(this.plugin.settings.pasteIntoSelection)
+                .onChange(async (value) => {
+                    this.plugin.settings.pasteIntoSelection = value;
                     await this.plugin.saveSettings();
                 }));
     }
