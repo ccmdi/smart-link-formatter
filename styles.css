@@ -67,30 +67,30 @@
   display: flex;
   gap: 8px;
   margin-bottom: 20px;
-  padding-bottom: 0;
 }
 
 .smart-link-formatter-nav button {
-  background: none;
-  border: none;
+  background: var(--background-modifier-form-field);
+  border: 1px solid var(--background-modifier-border);
   color: var(--text-muted);
   padding: 8px 16px;
   cursor: pointer;
   font-size: 14px;
   font-weight: 500;
-  border-bottom: 2px solid transparent;
   transition: all 0.2s ease;
-  margin-bottom: -1px;
+  border-radius: 6px;
 }
 
 .smart-link-formatter-nav button:hover {
-  color: var(--text-normal);
   background-color: var(--background-modifier-hover);
+  border-color: var(--background-modifier-border-hover);
 }
 
 .smart-link-formatter-nav button.smart-link-formatter-tab-active {
-  color: var(--interactive-accent);
-  border-bottom-color: var(--interactive-accent);
+  color: var(--text-on-accent);
+  background: var(--interactive-accent);
+  border-color: var(--interactive-accent);
+  font-weight: 600;
 }
 
 .smart-link-formatter-section-divider {
