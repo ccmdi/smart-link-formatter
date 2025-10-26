@@ -6,13 +6,13 @@ import {
 } from "./settings";
 import { CLIENTS } from "clients";
 import { generateUniqueToken } from "title-utils";
-import { isLink } from "utils";
+import { isLink, extractUrlAtCursor } from "utils";
 import { FailureMode } from "types/failure-mode";
 import { MarkdownView } from "obsidian"
 
 const BUFFER = '\u200B';
 const generatePlaceholder = (placeholder: string) => { return placeholder + BUFFER }
-const TIMEOUT_MS = 10000
+const placeholderPattern = /<span class="link-loading" id="(link-placeholder-[^"]+)"(?:\s+url="([^"]*)")?>Loading\.\.\.<\/span>(?:\u200B+)?/g; //todo
 
 
 export default class SmartLinkFormatterPlugin extends Plugin {
@@ -40,7 +40,15 @@ export default class SmartLinkFormatterPlugin extends Plugin {
       })
     );
 
-    this.cleanupOrphanedPlaceholders(); 
+    this.addCommand({
+      id: 'format-link-at-cursor',
+      name: 'Format link at cursor',
+      editorCallback: (editor: Editor) => {
+        this.formatLinkAtCursor(editor);
+      }
+    });
+
+    this.cleanupOrphanedPlaceholders();
   }
 
   private cleanupOrphanedPlaceholders() {
@@ -49,27 +57,30 @@ export default class SmartLinkFormatterPlugin extends Plugin {
 
     const editor = activeView.editor;
     const content = editor.getValue();
-    
-    const placeholderPattern = /<span class="link-loading" id="(link-placeholder-[^"]+)"(?:\s+url="([^"]*)")?>Loading\.\.\.<\/span>\u200B/g;
+
     const matches = content.matchAll(placeholderPattern);
-    let cleanedContent = content;
-    let foundOrphans = false;
+    const orphanedMatches: Array<{ match: RegExpMatchArray; index: number }> = [];
 
     for (const match of matches) {
       const fullMatch = match[0];
-      const placeholderId = match[1];
-      const url = match[2] || '';
-      
-      if (!this.activePlaceholders.has(fullMatch)) {
-        foundOrphans = true;
-        
-        const inactivePlaceholder = `<span class="link-loading-inactive" id="${placeholderId}" url="${url}">Failed to resolve</span>`;
-        cleanedContent = cleanedContent.replace(fullMatch, inactivePlaceholder);
+
+      if (!this.activePlaceholders.has(fullMatch) && match.index !== undefined) {
+        orphanedMatches.push({ match, index: match.index });
       }
     }
 
-    if (foundOrphans) {
-      editor.setValue(cleanedContent);
+    if (orphanedMatches.length === 0) return;
+
+    for (let i = orphanedMatches.length - 1; i >= 0; i--) {
+      const { match, index } = orphanedMatches[i];
+      const fullMatch = match[0];
+      const placeholderId = match[1];
+      const url = match[2] || '';
+
+      const inactivePlaceholder = `<span class="link-loading-inactive" id="${placeholderId}" url="${url}">Failed to resolve</span>`;
+      const startPos = editor.offsetToPos(index);
+      const endPos = editor.offsetToPos(index + fullMatch.length);
+      editor.replaceRange(inactivePlaceholder, startPos, endPos);
     }
   }
 
@@ -89,40 +100,26 @@ export default class SmartLinkFormatterPlugin extends Plugin {
     const activeFile = this.app.workspace.getActiveFile();
     if (!activeFile) return;
 
+    if (this.shouldOverride(editor)) return;
     if (!this.shouldReplace(editor, clipboardText)) return;
+    if (this.isBlacklisted(clipboardText)) return;
     evt.preventDefault();
 
+    this.handleFormat(clipboardText, editor);
+  }
+
+  private async handleFormat(clipboardText: string, editor: Editor) {
     const token = generateUniqueToken(clipboardText);
     const placeholder = generatePlaceholder(token);
     this.activePlaceholders.add(placeholder);
 
-    const selectionStartCursor = editor.getCursor('from');
-    const startOffset = editor.posToOffset(selectionStartCursor); 
-    editor.replaceSelection(placeholder); 
-    const placeholderStartPos = editor.offsetToPos(startOffset);
-    const placeholderEndPos = editor.offsetToPos(startOffset + placeholder.length);
-    editor.setCursor(placeholderEndPos);
+    editor.replaceSelection(placeholder);
 
-    // Blacklist check
-    try {
-      const url = new URL(clipboardText);
-      const blacklist = this.settings.blacklistedDomains
-        .split(",")
-        .map((domain) => domain.trim())
-        .filter((domain) => domain.length > 0);
-      if (blacklist.some((domain) => url.hostname.includes(domain))) {
-        editor.replaceRange(clipboardText, placeholderStartPos, placeholderEndPos);
-        return;
-      }
-    } catch (e) {
-      console.error("Failed to parse URL for blacklist check:", e);
-       editor.replaceRange(clipboardText, placeholderStartPos, placeholderEndPos);
-      return;
-    }
-
-    const timeoutPromise = new Promise((_, reject) => 
-      setTimeout(() => reject(new Error('Fetch timeout')), TIMEOUT_MS)
+    const timeoutPromise = new Promise((_, reject) =>
+      setTimeout(() => reject(new Error('Fetch timeout')), this.settings.timeoutSeconds * 1000)
     );
+
+    let didReplace = false;
 
     try {
       const client = CLIENTS.find(client => client.matches(clipboardText));
@@ -134,7 +131,7 @@ export default class SmartLinkFormatterPlugin extends Plugin {
         
         const formattedText = client.format(metadata, clipboardText, this);
         
-        this.replacePlaceholder(placeholder, formattedText, editor);
+        didReplace = this.replacePlaceholder(placeholder, formattedText, editor);
       } else {
         throw new Error("No client found for link");
       }
@@ -143,11 +140,16 @@ export default class SmartLinkFormatterPlugin extends Plugin {
       new Notice("Failed to format link");
 
       const failureText = FailureMode.format(this.settings.failureMode, clipboardText);
-      this.replacePlaceholder(placeholder, failureText, editor);
+      didReplace = this.replacePlaceholder(placeholder, failureText, editor);
+    }
+
+    if (!didReplace) {
+      this.cleanupOrphanedPlaceholders();
     }
   }
   
   private shouldReplace(editor: Editor, text: string): boolean {
+    //todo: rules for settings
     if (!isLink(text)) return false;
 
     const cursor = editor.getCursor();
@@ -222,6 +224,31 @@ export default class SmartLinkFormatterPlugin extends Plugin {
     return true;
   }
 
+  private shouldOverride(editor: Editor): boolean {
+    if (this.settings.pasteIntoSelection && editor.somethingSelected()) {
+      return true;
+    }
+    return false;
+  }
+
+  private isBlacklisted(text: string): boolean {
+    try {
+      const url = new URL(text);
+      const blacklist = this.settings.blacklistedDomains
+        .split(",")
+        .map((domain) => domain.trim())
+        .filter((domain) => domain.length > 0);
+      if (blacklist.some((domain) => url.hostname.includes(domain))) {
+        return true;
+      }
+    } catch (e) {
+      console.error("Failed to parse URL for blacklist check:", e);
+      return true;
+    }
+
+    return false;
+  }
+
    /** 
    * Replaces the placeholder with the final text.
    * @param file - The file to replace the placeholder in.
@@ -229,11 +256,13 @@ export default class SmartLinkFormatterPlugin extends Plugin {
    * @param newText - The new text to replace the placeholder with.
    * @param editor - The editor to replace the placeholder in.
    */
-  private async replacePlaceholder(
+  private replacePlaceholder(
     placeholder: string,
     newText: string,
     editor: Editor
-  ) {
+  ): boolean {
+    let didReplace = false;
+
     try {
         const editorContent = editor.getValue();
         
@@ -241,14 +270,46 @@ export default class SmartLinkFormatterPlugin extends Plugin {
             const startPos = editor.offsetToPos(editorContent.indexOf(placeholder));
             const endPos = editor.offsetToPos(editorContent.indexOf(placeholder) + placeholder.length);
             editor.replaceRange(newText, startPos, endPos);
+            didReplace = true;
         } else {
              console.warn("Smart Link Formatter: Placeholder not found in editor content.");
+             didReplace = false;
         }
     } catch (error) {
         console.error("Smart Link Formatter: Failed to replace placeholder.", error);
         new Notice("Error updating link in file.");
+        didReplace = false;
     }
     
     this.activePlaceholders.delete(placeholder);
+    return didReplace;
+  }
+
+  /**
+   * Formats a URL at the cursor position by fetching its title and replacing it with a formatted link.
+   * @param editor - The editor to format the link in.
+   */
+  async formatLinkAtCursor(editor: Editor) {
+    const cursor = editor.getCursor();
+    const line = editor.getLine(cursor.line);
+
+    const urlInfo = extractUrlAtCursor(line, cursor.ch);
+    if (!urlInfo) {
+      new Notice("No URL found at cursor position");
+      return;
+    }
+
+    const { url, start, end } = urlInfo;
+
+    if (this.isBlacklisted(url)) {
+      new Notice("URL is in blacklisted domains");
+      return;
+    }
+
+    const startPos = { line: cursor.line, ch: start };
+    const endPos = { line: cursor.line, ch: end };
+    editor.setSelection(startPos, endPos);
+
+    this.handleFormat(url, editor);
   }
 }

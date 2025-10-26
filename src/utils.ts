@@ -12,6 +12,34 @@ export function isLink(text: string): boolean {
 }
 
 /**
+ * Extracts a URL at the cursor position in a line of text.
+ * @param line - The line of text.
+ * @param cursorCh - The cursor position in the line.
+ * @returns An object with the URL, start position, and end position, or null if no URL found.
+ */
+export function extractUrlAtCursor(line: string, cursorCh: number): { url: string; start: number; end: number } | null {
+  // URL regex pattern - matches http:// or https:// URLs
+  const urlRegex = /https?:\/\/[^\s)]+/g;
+  let match: RegExpExecArray | null;
+
+  while ((match = urlRegex.exec(line)) !== null) {
+    const start = match.index;
+    const end = start + match[0].length;
+
+    // Check if cursor is within this URL
+    if (cursorCh >= start && cursorCh <= end) {
+      return {
+        url: match[0],
+        start: start,
+        end: end
+      };
+    }
+  }
+
+  return null;
+}
+
+/**
  * Formats a date string to a more readable format (YYYY/MM/DD).
  * @param dateStr - The date string to format.
  * @returns The formatted date string.

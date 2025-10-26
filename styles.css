@@ -61,3 +61,39 @@
   margin-top: auto;
   margin-bottom: auto;
 }
+
+/* Tab navigation styles */
+.smart-link-formatter-nav {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 20px;
+}
+
+.smart-link-formatter-nav button {
+  background: var(--background-modifier-form-field);
+  border: 1px solid var(--background-modifier-border);
+  color: var(--text-muted);
+  padding: 8px 16px;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 500;
+  transition: all 0.2s ease;
+  border-radius: 6px;
+}
+
+.smart-link-formatter-nav button:hover {
+  background-color: var(--background-modifier-hover);
+  border-color: var(--background-modifier-border-hover);
+}
+
+.smart-link-formatter-nav button.smart-link-formatter-tab-active {
+  color: var(--text-on-accent);
+  background: var(--interactive-accent);
+  border-color: var(--interactive-accent);
+  font-weight: 600;
+}
+
+.smart-link-formatter-section-divider {
+  height: 1px;
+  margin-bottom: 20px;
+}
