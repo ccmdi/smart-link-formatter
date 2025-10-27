@@ -20,11 +20,33 @@ jobs:
         run: |
           npm install
           npm run build
-      - name: Create release
+      - name: Generate release notes from PRs
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          tag="${GITHUB_REF#refs/tags/}"
+          previous_tag=$(git describe --tags --abbrev=0 "$tag"^ 2>/dev/null || echo "")
+          
+          echo "## What's Changed" > release_notes.md
+          echo "" >> release_notes.md
+          
+          if [ -z "$previous_tag" ]; then
+            echo "Initial release" >> release_notes.md
+          else
+            # Get commits between tags and extract PR numbers
+            git log "$previous_tag..$tag" --merges --oneline | \
+              grep -oP '#\K\d+' | sort -u | while read pr_number; do
+                gh pr view "$pr_number" --json title,body --jq '"### " + .title + "\n\n" + .body + "\n"' >> release_notes.md 2>/dev/null || true
+              done
+          fi
+
+      - name: Create draft release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           tag="${GITHUB_REF#refs/tags/}"
           gh release create "$tag" \
             --title="$tag" \
+            --notes-file release_notes.md \
+            --draft \
             main.js manifest.json styles.css
