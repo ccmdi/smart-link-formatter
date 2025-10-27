@@ -1,3 +1,5 @@
+import { Extraction } from "types/extraction";
+
 /**
  * Escapes special characters in a string to be used in Markdown.
  * @param text - The string to escape.
@@ -13,12 +15,31 @@ export function isLink(text: string): boolean {
 
 /**
  * Extracts a URL at the cursor position in a line of text.
+ * If the URL is inside an existing markdown link, returns the entire link for replacement.
  * @param line - The line of text.
  * @param cursorCh - The cursor position in the line.
  * @returns An object with the URL, start position, and end position, or null if no URL found.
  */
-export function extractUrlAtCursor(line: string, cursorCh: number): { url: string; start: number; end: number } | null {
-  // URL regex pattern - matches http:// or https:// URLs
+export function extractUrlAtCursor(line: string, cursorCh: number): Extraction | null {
+  // First check if cursor is inside a markdown link: [text](url)
+  const markdownLinkRegex = /\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g;
+  let mdMatch: RegExpExecArray | null;
+
+  while ((mdMatch = markdownLinkRegex.exec(line)) !== null) {
+    const linkStart = mdMatch.index;
+    const linkEnd = linkStart + mdMatch[0].length;
+    const urlInLink = mdMatch[2];
+
+    // Check if cursor is anywhere within the markdown link
+    if (cursorCh >= linkStart && cursorCh <= linkEnd) {
+      return {
+        url: urlInLink,
+        start: linkStart,
+        end: linkEnd
+      };
+    }
+  }
+
   const urlRegex = /https?:\/\/[^\s)]+/g;
   let match: RegExpExecArray | null;
 

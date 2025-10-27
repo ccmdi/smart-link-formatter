@@ -9,6 +9,7 @@ import { generateUniqueToken } from "title-utils";
 import { isLink, extractUrlAtCursor } from "utils";
 import { FailureMode } from "types/failure-mode";
 import { MarkdownView } from "obsidian"
+import { Extraction } from "types/extraction";
 
 const BUFFER = '\u200B';
 const generatePlaceholder = (placeholder: string) => { return placeholder + BUFFER }
@@ -293,13 +294,13 @@ export default class SmartLinkFormatterPlugin extends Plugin {
     const cursor = editor.getCursor();
     const line = editor.getLine(cursor.line);
 
-    const urlInfo = extractUrlAtCursor(line, cursor.ch);
-    if (!urlInfo) {
+    const extraction = extractUrlAtCursor(line, cursor.ch);
+    if (!extraction) {
       new Notice("No URL found at cursor position");
       return;
     }
 
-    const { url, start, end } = urlInfo;
+    const { url, start, end } = extraction;
 
     if (this.isBlacklisted(url)) {
       new Notice("URL is in blacklisted domains");
