@@ -12,6 +12,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
       - name: Use Node.js
         uses: actions/setup-node@v3
         with:
@@ -25,15 +27,18 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           tag="${GITHUB_REF#refs/tags/}"
-          previous_tag=$(git describe --tags --abbrev=0 "$tag"^ 2>/dev/null || echo "")
+          
+          # Get all tags sorted by version, then get the one before current
+          previous_tag=$(git tag --sort=-version:refname | grep -A1 "^${tag}$" | tail -n1)
           
           echo "## What's Changed" > release_notes.md
           echo "" >> release_notes.md
           
-          if [ -z "$previous_tag" ]; then
+          if [ "$previous_tag" == "$tag" ] || [ -z "$previous_tag" ]; then
             echo "Initial release" >> release_notes.md
           else
-            # Get commits between tags and extract PR numbers
+            echo "Comparing $previous_tag to $tag" >> release_notes.md
+            echo "" >> release_notes.md
             git log "$previous_tag..$tag" --merges --oneline | \
               grep -oP '#\K\d+' | sort -u | while read pr_number; do
                 gh pr view "$pr_number" --json title,body --jq '"### " + .title + "\n\n" + .body + "\n"' >> release_notes.md 2>/dev/null || true
