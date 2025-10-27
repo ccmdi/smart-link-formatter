@@ -14,32 +14,38 @@ export function isLink(text: string): boolean {
 }
 
 /**
- * Extracts a URL at the cursor position in a line of text.
- * If the URL is inside an existing markdown link, returns the entire link for replacement.
+ * Extracts a markdown link at the cursor position.
  * @param line - The line of text.
  * @param cursorCh - The cursor position in the line.
- * @returns An object with the URL, start position, and end position, or null if no URL found.
+ * @returns Extraction object if cursor is within a markdown link, null otherwise.
  */
-export function extractUrlAtCursor(line: string, cursorCh: number): Extraction | null {
-  // First check if cursor is inside a markdown link: [text](url)
+function extractMarkdownLink(line: string, cursorCh: number): Extraction | null {
   const markdownLinkRegex = /\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g;
-  let mdMatch: RegExpExecArray | null;
+  let match: RegExpExecArray | null;
 
-  while ((mdMatch = markdownLinkRegex.exec(line)) !== null) {
-    const linkStart = mdMatch.index;
-    const linkEnd = linkStart + mdMatch[0].length;
-    const urlInLink = mdMatch[2];
+  while ((match = markdownLinkRegex.exec(line)) !== null) {
+    const start = match.index;
+    const end = start + match[0].length;
 
-    // Check if cursor is anywhere within the markdown link
-    if (cursorCh >= linkStart && cursorCh <= linkEnd) {
+    if (cursorCh >= start && cursorCh <= end) {
       return {
-        url: urlInLink,
-        start: linkStart,
-        end: linkEnd
+        url: match[2],
+        start,
+        end
       };
     }
   }
 
+  return null;
+}
+
+/**
+ * Extracts a plain URL at the cursor position.
+ * @param line - The line of text.
+ * @param cursorCh - The cursor position in the line.
+ * @returns Extraction object if cursor is within a URL, null otherwise.
+ */
+function extractPlainUrl(line: string, cursorCh: number): Extraction | null {
   const urlRegex = /https?:\/\/[^\s)]+/g;
   let match: RegExpExecArray | null;
 
@@ -47,17 +53,28 @@ export function extractUrlAtCursor(line: string, cursorCh: number): Extraction |
     const start = match.index;
     const end = start + match[0].length;
 
-    // Check if cursor is within this URL
     if (cursorCh >= start && cursorCh <= end) {
       return {
         url: match[0],
-        start: start,
-        end: end
+        start,
+        end
       };
     }
   }
 
   return null;
+}
+
+/**
+ * Extracts a URL at the cursor position in a line of text.
+ * If the URL is inside an existing markdown link, returns the entire link for replacement.
+ * @param line - The line of text.
+ * @param cursorCh - The cursor position in the line.
+ * @returns An object with the URL, start position, and end position, or null if no URL found.
+ */
+export function extractUrlAtCursor(line: string, cursorCh: number): Extraction | null {
+  return extractMarkdownLink(line, cursorCh) 
+  ?? extractPlainUrl(line, cursorCh);
 }
 
 /**
