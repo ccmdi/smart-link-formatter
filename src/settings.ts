@@ -144,7 +144,7 @@ export class LinkFormatterSettingTab extends PluginSettingTab {
                 .setClass('smart-link-formatter-replacement-setting');
 
             setting.addText(text => text
-                .setPlaceholder('Regex pattern (e.g., \\|)')
+                .setPlaceholder('Regex pattern')
                 .setValue(replacement.pattern)
                 .onChange(async (value) => {
                     this.plugin.settings.titleReplacements[index].pattern = value;
@@ -154,7 +154,7 @@ export class LinkFormatterSettingTab extends PluginSettingTab {
             setting.controlEl.createSpan({ text: ' → ', cls: 'smart-link-formatter-arrow' });
 
             setting.addText(text => text
-                .setPlaceholder('Replacement (empty to remove)')
+                .setPlaceholder('Replacement')
                 .setValue(replacement.replacement)
                 .onChange(async (value) => {
                     this.plugin.settings.titleReplacements[index].replacement = value;
@@ -167,6 +167,30 @@ export class LinkFormatterSettingTab extends PluginSettingTab {
                 .onChange(async (value) => {
                     this.plugin.settings.titleReplacements[index].enabled = value;
                     await this.plugin.saveSettings();
+                }));
+
+            setting.addButton(button => button
+                .setIcon('arrow-up')
+                .setTooltip('Move up')
+                .setDisabled(index === 0)
+                .onClick(async () => {
+                    const temp = this.plugin.settings.titleReplacements[index];
+                    this.plugin.settings.titleReplacements[index] = this.plugin.settings.titleReplacements[index - 1];
+                    this.plugin.settings.titleReplacements[index - 1] = temp;
+                    await this.plugin.saveSettings();
+                    this.display();
+                }));
+
+            setting.addButton(button => button
+                .setIcon('arrow-down')
+                .setTooltip('Move down')
+                .setDisabled(index === this.plugin.settings.titleReplacements.length - 1)
+                .onClick(async () => {
+                    const temp = this.plugin.settings.titleReplacements[index];
+                    this.plugin.settings.titleReplacements[index] = this.plugin.settings.titleReplacements[index + 1];
+                    this.plugin.settings.titleReplacements[index + 1] = temp;
+                    await this.plugin.saveSettings();
+                    this.display();
                 }));
 
             setting.addButton(button => button

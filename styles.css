@@ -97,3 +97,16 @@
   height: 1px;
   margin-bottom: 20px;
 }
+
+/* Replacement setting styles */
+.smart-link-formatter-replacement-setting .setting-item-control {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.smart-link-formatter-replacement-setting .setting-item-control input[type="text"] {
+  flex: 1;
+  min-width: 100px;
+}
