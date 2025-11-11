@@ -9,6 +9,20 @@ export function escapeMarkdownChars(text: string): string {
   return text.replace(/([\[\]|*_`\\])/g, "\\$1");
 }
 
+export function unescapeHtml(text: string): string {
+  const map = {
+      '&amp;': '&',
+      '&lt;': '<',
+      '&gt;': '>',
+      '&quot;': '"',
+      '&#39;': "'"
+  };
+  return text
+    .replace(/&amp;|&lt;|&gt;|&quot;|&#39;/g, m => map[m as keyof typeof map])
+    .replace(/&#(\d+);/g, (_, dec) => String.fromCharCode(Number(dec)))
+    .replace(/&#x([0-9a-f]+);/gi, (_, hex) => String.fromCharCode(parseInt(hex, 16)));
+}
+
 export function isLink(text: string): boolean {
   return !!text.match(/^https?:\/\//)
 }

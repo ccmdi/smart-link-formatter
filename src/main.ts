@@ -6,10 +6,9 @@ import {
 } from "./settings";
 import { CLIENTS } from "clients";
 import { generateUniqueToken } from "title-utils";
-import { isLink, extractUrlAtCursor } from "utils";
+import { isLink, extractUrlAtCursor, unescapeHtml } from "utils";
 import { FailureMode } from "types/failure-mode";
 import { MarkdownView } from "obsidian"
-import { Extraction } from "types/extraction";
 
 const BUFFER = '\u200B';
 const generatePlaceholder = (placeholder: string) => { return placeholder + BUFFER }
@@ -130,7 +129,9 @@ export default class SmartLinkFormatterPlugin extends Plugin {
           timeoutPromise
         ]) as Record<string, string | undefined>;
         
-        const formattedText = client.format(metadata, clipboardText, this);
+        const formattedText = unescapeHtml(
+          client.format(metadata, clipboardText, this)
+        );
         
         didReplace = this.replacePlaceholder(placeholder, formattedText, editor);
       } else {
