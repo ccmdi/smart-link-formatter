@@ -3,12 +3,19 @@ import SmartLinkFormatterPlugin from "main";
 import { CLIENTS, ClientName } from "clients";
 import { FailureMode } from "types/failure-mode";
 
+export interface TitleReplacement {
+    pattern: string;      // Regex pattern to find
+    replacement: string;  // String to replace with (empty for removal)
+    enabled: boolean;     // Toggle to enable/disable without deleting
+}
+
 export interface LinkFormatterSettings {
     autoLink: boolean;
     pasteIntoSelection: boolean;
     failureMode: FailureMode;
     timeoutSeconds: number;
     blacklistedDomains: string;
+    titleReplacements: TitleReplacement[];
     clientFormats: Partial<Record<ClientName, string>>; // Maps ClientName -> format template
 }
 
@@ -18,6 +25,7 @@ export const DEFAULT_SETTINGS: LinkFormatterSettings = {
     failureMode: FailureMode.Revert,
     timeoutSeconds: 10,
     blacklistedDomains: '',
+    titleReplacements: [],
     clientFormats: {}
 };
 export class LinkFormatterSettingTab extends PluginSettingTab {
@@ -107,7 +115,7 @@ export class LinkFormatterSettingTab extends PluginSettingTab {
                 text.inputEl.min = '3';
                 text.inputEl.max = '60';
                 text.inputEl.step = '1';
-            
+
                 text
                     .setPlaceholder('10')
                     .setValue(String(this.plugin.settings.timeoutSeconds))
@@ -122,6 +130,69 @@ export class LinkFormatterSettingTab extends PluginSettingTab {
                         }
                     });
             });
+
+        // Title replacements section
+        containerEl.createEl('h3', { text: 'Title Replacements' });
+        containerEl.createEl('p', {
+            text: 'Apply regex find/replace transformations to link titles. Patterns are applied in order.',
+            cls: 'setting-item-description'
+        });
+
+        // Display existing replacements
+        this.plugin.settings.titleReplacements.forEach((replacement, index) => {
+            const setting = new Setting(containerEl)
+                .setClass('smart-link-formatter-replacement-setting');
+
+            setting.addText(text => text
+                .setPlaceholder('Regex pattern (e.g., \\|)')
+                .setValue(replacement.pattern)
+                .onChange(async (value) => {
+                    this.plugin.settings.titleReplacements[index].pattern = value;
+                    await this.plugin.saveSettings();
+                }));
+
+            setting.controlEl.createSpan({ text: ' → ', cls: 'smart-link-formatter-arrow' });
+
+            setting.addText(text => text
+                .setPlaceholder('Replacement (empty to remove)')
+                .setValue(replacement.replacement)
+                .onChange(async (value) => {
+                    this.plugin.settings.titleReplacements[index].replacement = value;
+                    await this.plugin.saveSettings();
+                }));
+
+            setting.addToggle(toggle => toggle
+                .setValue(replacement.enabled)
+                .setTooltip('Enable/disable this replacement')
+                .onChange(async (value) => {
+                    this.plugin.settings.titleReplacements[index].enabled = value;
+                    await this.plugin.saveSettings();
+                }));
+
+            setting.addButton(button => button
+                .setIcon('trash')
+                .setTooltip('Delete replacement')
+                .onClick(async () => {
+                    this.plugin.settings.titleReplacements.splice(index, 1);
+                    await this.plugin.saveSettings();
+                    this.display();
+                }));
+        });
+
+        // Add new replacement button
+        new Setting(containerEl)
+            .addButton(button => button
+                .setButtonText('Add replacement rule')
+                .setCta()
+                .onClick(async () => {
+                    this.plugin.settings.titleReplacements.push({
+                        pattern: '',
+                        replacement: '',
+                        enabled: true
+                    });
+                    await this.plugin.saveSettings();
+                    this.display();
+                }));
     }
 
     private displayClientSettings(containerEl: HTMLElement): void {

@@ -1,22 +1,33 @@
 import { requestUrl } from "obsidian";
-import { escapeMarkdownChars, formatDuration, formatDate } from "utils";
+import { escapeMarkdownChars, formatDuration, formatDate, applyTitleReplacements } from "utils";
 import { Notice } from "obsidian";
 import SmartLinkFormatterPlugin from "main";
 import { getPageTitle } from "title-utils";
 import moment from "moment";
+import { TitleReplacement } from "settings";
 
-export interface Client {
-  name: ClientName; // Unique identifier for the client
-  displayName: string; // Human-readable name for settings UI
-  defaultFormat: string; // Default format template with variables
-  getAvailableVariables: () => string[]; // Returns list of available template variables
-  fetchMetadata: (url: string) => Promise<Record<string, string | undefined>>;
-  format: (
+export abstract class Client {
+  abstract readonly name: ClientName;
+  abstract displayName: string;
+  abstract defaultFormat: string;
+  abstract getAvailableVariables(): string[];
+  abstract fetchMetadata(url: string): Promise<Record<string, string | undefined>>;
+  abstract matches(url: string): boolean;
+
+  format(
     metadata: Record<string, string | undefined>,
     url: string,
     plugin: SmartLinkFormatterPlugin
-  ) => string;
-  matches: (url: string) => boolean;
+  ): string {
+    const template = plugin.settings.clientFormats?.[this.name] || this.defaultFormat;
+    let formattedText = formatTemplate(template, metadata, url);
+
+    if (plugin.settings.titleReplacements.length > 0) {
+      formattedText = applyTitleReplacements(formattedText, plugin.settings.titleReplacements);
+    }
+
+    return wrapInMarkdownLink(formattedText, url);
+  }
 }
 
 /**
@@ -121,7 +132,7 @@ export function wrapInMarkdownLink(formattedText: string, url: string): string {
   return isEmbed ? `!${link}` : link;
 }
 
-class YouTubeClient implements Client {
+class YouTubeClient extends Client {
   readonly name = "youtube" as const;
   displayName = "YouTube";
   defaultFormat = "[{title}] by {channel}";
@@ -245,9 +256,7 @@ class YouTubeClient implements Client {
     // Add timestamp to metadata for template formatting
     const extendedMetadata = { ...metadata, timestamp: timestampStr };
 
-    const template = plugin.settings.clientFormats?.[this.name] || this.defaultFormat;
-    const formattedText = formatTemplate(template, extendedMetadata, url);
-    return wrapInMarkdownLink(formattedText, url);
+    return super.format(extendedMetadata, url, plugin);
   }
 
   matches = (url: string) => {
@@ -270,7 +279,7 @@ class YouTubeClient implements Client {
   }
 }
 
-class YouTubeMusicClient implements Client {
+class YouTubeMusicClient extends Client {
   readonly name = "youtube-music" as const;
   displayName = "YouTube Music";
   defaultFormat = "[{title}] - {artist}";
@@ -346,22 +355,12 @@ class YouTubeMusicClient implements Client {
     return urlObj.searchParams.get("v");
   }
 
-  format(
-    metadata: Record<string, string | undefined>,
-    url: string,
-    plugin: SmartLinkFormatterPlugin
-  ): string {
-    const template = plugin.settings.clientFormats?.[this.name] || this.defaultFormat;
-    const formattedText = formatTemplate(template, metadata, url);
-    return wrapInMarkdownLink(formattedText, url);
-  }
-
   matches = (url: string) => {
     return url.match(/^https?:\/\/music\.youtube\.com\//) !== null;
   };
 }
 
-class ImageClient implements Client {
+class ImageClient extends Client {
   readonly name = "image" as const;
   displayName = "Image";
   defaultFormat = "![{title}]";
@@ -392,19 +391,9 @@ class ImageClient implements Client {
       return { title: "image" };
     }
   }
-
-  format(
-    metadata: Record<string, string | undefined>,
-    url: string,
-    plugin: SmartLinkFormatterPlugin
-  ): string {
-    const template = plugin.settings.clientFormats?.[this.name] || this.defaultFormat;
-    const formattedText = formatTemplate(template, metadata, url);
-    return wrapInMarkdownLink(formattedText, url);
-  }
 }
 
-class TwitterClient implements Client {
+class TwitterClient extends Client {
   readonly name = "twitter" as const;
   displayName = "Twitter/X";
   defaultFormat = "[{text}] - @{author}";
@@ -565,19 +554,9 @@ class TwitterClient implements Client {
     const match = url.match(/status\/(\d+)/);
     return match ? match[1] : null;
   }
-
-  format(
-    metadata: Record<string, string | undefined>,
-    url: string,
-    plugin: SmartLinkFormatterPlugin
-  ): string {
-    const template = plugin.settings.clientFormats?.[this.name] || this.defaultFormat;
-    const formattedText = formatTemplate(template, metadata, url);
-    return wrapInMarkdownLink(formattedText, url);
-  }
 }
 
-class RedditClient implements Client {
+class RedditClient extends Client {
   readonly name = "reddit" as const;
   displayName = "Reddit";
   defaultFormat = "[{title}] - r/{subreddit}";
@@ -635,19 +614,9 @@ class RedditClient implements Client {
       created_at: undefined
     };
   }
-
-  format(
-    metadata: Record<string, string | undefined>,
-    url: string,
-    plugin: SmartLinkFormatterPlugin
-  ): string {
-    const template = plugin.settings.clientFormats?.[this.name] || this.defaultFormat;
-    const formattedText = formatTemplate(template, metadata, url);
-    return wrapInMarkdownLink(formattedText, url);
-  }
 }
 
-class GitHubClient implements Client {
+class GitHubClient extends Client {
   readonly name = "github" as const;
   displayName = "GitHub";
   defaultFormat = "[{owner}/{repo}]: {description}";
@@ -688,26 +657,16 @@ class GitHubClient implements Client {
       console.error(`Failed to fetch GitHub metadata for ${url}:`, error);
       new Notice("Failed to fetch GitHub data.", 3000);
     }
-    
+
     const title = await getPageTitle(url);
     return { title: escapeMarkdownChars(title) };
-  }
-
-  format(
-    metadata: Record<string, string | undefined>,
-    url: string,
-    plugin: SmartLinkFormatterPlugin
-  ): string {
-    const template = plugin.settings.clientFormats?.[this.name] || this.defaultFormat;
-    const formattedText = formatTemplate(template, metadata, url);
-    return wrapInMarkdownLink(formattedText, url);
   }
 }
 
 /**
  * Fallback client that matches every link and simply formats the title.
  */
-class DefaultClient implements Client {
+class DefaultClient extends Client {
   readonly name = "default" as const;
   displayName = "Default";
   defaultFormat = "[{title}]";
@@ -720,11 +679,7 @@ class DefaultClient implements Client {
       const title = await getPageTitle(url);
       return { title: title };
   }
-  format(metadata: Record<string, string | undefined>, url: string, plugin: SmartLinkFormatterPlugin): string {
-      const template = plugin.settings.clientFormats?.[this.name] || this.defaultFormat;
-      const formattedText = formatTemplate(template, metadata, url);
-      return wrapInMarkdownLink(formattedText, url);
-  }
+
   matches(url: string): boolean {
       return true;
   }
