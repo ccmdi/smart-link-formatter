@@ -1,4 +1,5 @@
 import { Extraction } from "types/extraction";
+import { TitleReplacement } from "settings";
 
 /**
  * Escapes special characters in a string to be used in Markdown.
@@ -7,6 +8,43 @@ import { Extraction } from "types/extraction";
  */
 export function escapeMarkdownChars(text: string): string {
   return text.replace(/([\[\]|*_`\\])/g, "\\$1");
+}
+
+/**
+ * Applies a list of regex replacements to text in sequence.
+ * @param text - The text to transform
+ * @param replacements - Array of find/replace patterns
+ * @returns Transformed text
+ */
+export function applyTitleReplacements(text: string, replacements: TitleReplacement[]): string {
+  let result = text;
+
+  for (const { pattern, replacement, enabled } of replacements) {
+    if (!enabled || !pattern) continue;
+
+    try {
+      const regex = new RegExp(pattern, 'g');
+      result = result.replace(regex, replacement);
+    } catch (e) {
+      console.error(`Invalid replacement pattern "${pattern}":`, e);
+    }
+  }
+
+  return result.trim();
+}
+
+export function unescapeHtml(text: string): string {
+  const map = {
+      '&amp;': '&',
+      '&lt;': '<',
+      '&gt;': '>',
+      '&quot;': '"',
+      '&#39;': "'"
+  };
+  return text
+    .replace(/&amp;|&lt;|&gt;|&quot;|&#39;/g, m => map[m as keyof typeof map])
+    .replace(/&#(\d+);/g, (_, dec) => String.fromCharCode(Number(dec)))
+    .replace(/&#x([0-9a-f]+);/gi, (_, hex) => String.fromCharCode(parseInt(hex, 16)));
 }
 
 export function isLink(text: string): boolean {

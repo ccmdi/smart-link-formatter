@@ -27,7 +27,7 @@ Example format: `[{title}]`
 
 If you need to format a date (e.g. `upload_date`), you can use moment.js date formats: `{upload_date|MMMM Do, YYYY}`
 
-### Custom Formatting
+### Capturing
 
 Clients in the plugin have unique variables you can capture. For instance, when pasting a **YouTube** link, the following variables are available for formatting:
 
@@ -42,5 +42,11 @@ Clients in the plugin have unique variables you can capture. For instance, when 
 - `{timestamp}` - For timestamped links (formats as @HH:MM:SS or @MM:SS)
 
 Example format: `[{title}] by {channel}`
+
+### Replacements
+Regex replacements are also available to do rules-based replacements on the formatted text. Useful examples:
+  - Normalize spaces: `\s{2,}` -> (empty)
+  - Remove parenthetical text: `\s*\([^)]+\)` -> (empty)
+  - Truncate after `n` chars (link only): `(?<=(?<!\\)\[)(.{0,50}\S*?)\s.*?(?=(?<!\\)\])` -> `$1...`
 
 Other clients follow similar patterns, and their variables can be found in the plugin settings.

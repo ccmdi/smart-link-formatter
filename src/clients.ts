@@ -1,22 +1,31 @@
 import { requestUrl } from "obsidian";
-import { escapeMarkdownChars, formatDuration, formatDate } from "utils";
-import { Notice } from "obsidian";
+import { escapeMarkdownChars, formatDuration, formatDate, applyTitleReplacements } from "utils";
 import SmartLinkFormatterPlugin from "main";
 import { getPageTitle } from "title-utils";
 import moment from "moment";
 
-export interface Client {
-  name: ClientName; // Unique identifier for the client
-  displayName: string; // Human-readable name for settings UI
-  defaultFormat: string; // Default format template with variables
-  getAvailableVariables: () => string[]; // Returns list of available template variables
-  fetchMetadata: (url: string) => Promise<Record<string, string | undefined>>;
-  format: (
+export abstract class Client {
+  abstract readonly name: ClientName;
+  abstract displayName: string;
+  abstract defaultFormat: string;
+  abstract getAvailableVariables(): string[];
+  abstract fetchMetadata(url: string): Promise<Record<string, string | undefined>>;
+  abstract matches(url: string): boolean;
+
+  format(
     metadata: Record<string, string | undefined>,
     url: string,
     plugin: SmartLinkFormatterPlugin
-  ) => string;
-  matches: (url: string) => boolean;
+  ): string {
+    const template = plugin.settings.clientFormats?.[this.name] || this.defaultFormat;
+    let formattedText = formatTemplate(template, metadata, url);
+
+    if (plugin.settings.titleReplacements.length > 0) {
+      formattedText = applyTitleReplacements(formattedText, plugin.settings.titleReplacements);
+    }
+
+    return wrapInMarkdownLink(formattedText, url);
+  }
 }
 
 /**
@@ -121,7 +130,7 @@ export function wrapInMarkdownLink(formattedText: string, url: string): string {
   return isEmbed ? `!${link}` : link;
 }
 
-class YouTubeClient implements Client {
+class YouTubeClient extends Client {
   readonly name = "youtube" as const;
   displayName = "YouTube";
   defaultFormat = "[{title}] by {channel}";
@@ -143,82 +152,43 @@ class YouTubeClient implements Client {
   async fetchMetadata(
     url: string
   ): Promise<Record<string, string | undefined>> {
-    try {
-      const response = await requestUrl({ url: url, method: "GET" });
-      const html = response.text;
+    const response = await requestUrl({ url: url, method: "GET" });
+    const html = response.text;
 
-      let playerResponseJson: any = null;
-      try {
-        const match = html.match(/var ytInitialPlayerResponse = ({.*?});/);
-        if (match && match[1]) {
-          playerResponseJson = JSON.parse(match[1]);
-        } else {
-          const dataMatch = html.match(/var ytInitialData = ({.*?});/);
-          if (dataMatch && dataMatch[1]) {
-            playerResponseJson = JSON.parse(dataMatch[1]);
-          } else {
-            console.warn(
-              "Could not find ytInitialPlayerResponse or ytInitialData in HTML."
-            );
-          }
-        }
-      } catch (parseError) {
-        console.error("Failed to parse YouTube JSON data:", parseError);
-        playerResponseJson = null;
-      }
+    const match = html.match(/var ytInitialPlayerResponse = ({.*?});/);
+    const dataMatch = html.match(/var ytInitialData = ({.*?});/);
 
-      if (playerResponseJson) {
-        const videoDetails = playerResponseJson.videoDetails;
-        const microformat =
-          playerResponseJson.microformat?.playerMicroformatRenderer;
-
-        if (videoDetails || microformat) {
-          const title = videoDetails?.title || microformat?.title?.simpleText;
-          const uploader =
-            videoDetails?.author || microformat?.ownerChannelName?.simpleText;
-          const description =
-            videoDetails?.shortDescription ||
-            microformat?.description?.simpleText;
-          const views = videoDetails?.viewCount;
-          const durationSeconds = videoDetails?.lengthSeconds;
-          const uploadDate = microformat?.publishDate;
-
-          return {
-            title: title ? escapeMarkdownChars(title) : undefined,
-            uploader: uploader ? escapeMarkdownChars(uploader) : undefined,
-            channel: uploader ? escapeMarkdownChars(uploader) : undefined,
-            description: description
-              ? escapeMarkdownChars(description)
-              : undefined,
-            views: views ? parseInt(views).toLocaleString() : undefined,
-            duration: durationSeconds
-              ? formatDuration(parseInt(durationSeconds))
-              : undefined,
-            upload_date: uploadDate ? escapeMarkdownChars(uploadDate) : undefined,
-          };
-        } else {
-          console.warn(
-            "Could not find videoDetails or microformat in JSON data."
-          );
-        }
-      }
-    } catch (error) {
-      console.error(
-        `Failed to fetch or parse YouTube metadata for ${url}:`,
-        error
-      );
-      new Notice("Failed to fetch YouTube data.", 3000);
+    let playerResponseJson: any = null;
+    if (match && match[1]) {
+      playerResponseJson = JSON.parse(match[1]);
+    } else if (dataMatch && dataMatch[1]) {
+      playerResponseJson = JSON.parse(dataMatch[1]);
+    } else {
+      throw new Error("Could not find ytInitialPlayerResponse or ytInitialData in HTML.");
     }
 
-    // Fallback
+    const videoDetails = playerResponseJson.videoDetails;
+    const microformat = playerResponseJson.microformat?.playerMicroformatRenderer;
+
+    if (!videoDetails && !microformat) {
+      throw new Error("Could not find videoDetails or microformat in JSON data.");
+    }
+
+    const title = videoDetails?.title || microformat?.title?.simpleText;
+    const uploader = videoDetails?.author || microformat?.ownerChannelName?.simpleText;
+    const description = videoDetails?.shortDescription || microformat?.description?.simpleText;
+    const views = videoDetails?.viewCount;
+    const durationSeconds = videoDetails?.lengthSeconds;
+    const uploadDate = microformat?.publishDate;
+
     return {
-      title: escapeMarkdownChars(url),
-      uploader: undefined,
-      channel: undefined,
-      description: undefined,
-      views: undefined,
-      duration: undefined,
-      upload_date: undefined,
+      title: title ? escapeMarkdownChars(title) : undefined,
+      uploader: uploader ? escapeMarkdownChars(uploader) : undefined,
+      channel: uploader ? escapeMarkdownChars(uploader) : undefined,
+      description: description ? escapeMarkdownChars(description) : undefined,
+      views: views ? parseInt(views).toLocaleString() : undefined,
+      duration: durationSeconds ? formatDuration(parseInt(durationSeconds)) : undefined,
+      upload_date: uploadDate ? escapeMarkdownChars(uploadDate) : undefined,
     };
   }
 
@@ -245,9 +215,7 @@ class YouTubeClient implements Client {
     // Add timestamp to metadata for template formatting
     const extendedMetadata = { ...metadata, timestamp: timestampStr };
 
-    const template = plugin.settings.clientFormats?.[this.name] || this.defaultFormat;
-    const formattedText = formatTemplate(template, extendedMetadata, url);
-    return wrapInMarkdownLink(formattedText, url);
+    return super.format(extendedMetadata, url, plugin);
   }
 
   matches = (url: string) => {
@@ -270,7 +238,7 @@ class YouTubeClient implements Client {
   }
 }
 
-class YouTubeMusicClient implements Client {
+class YouTubeMusicClient extends Client {
   readonly name = "youtube-music" as const;
   displayName = "YouTube Music";
   defaultFormat = "[{title}] - {artist}";
@@ -282,62 +250,48 @@ class YouTubeMusicClient implements Client {
   async fetchMetadata(
     url: string
   ): Promise<Record<string, string | undefined>> {
-    try {
-      const videoId = this.extractVideoId(url);
-      if (!videoId) {
-        throw new Error("Could not extract video ID from URL");
-      }
-
-      const payload = {
-        videoId: videoId,
-        context: {
-          client: {
-            clientName: "WEB_REMIX",
-            clientVersion: "1.20251015.03.00",
-            hl: "en",
-            gl: "US"
-          }
-        }
-      };
-
-      const response = await requestUrl({
-        url: "https://music.youtube.com/youtubei/v1/player?prettyPrint=false",
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify(payload)
-      });
-
-      const data = JSON.parse(response.text);
-      const videoDetails = data.videoDetails;
-
-      if (videoDetails) {
-        return {
-          title: videoDetails.title ? escapeMarkdownChars(videoDetails.title) : undefined,
-          artist: videoDetails.author ? escapeMarkdownChars(videoDetails.author) : undefined,
-          duration: videoDetails.lengthSeconds
-            ? formatDuration(parseInt(videoDetails.lengthSeconds))
-            : undefined,
-          views: videoDetails.viewCount
-            ? parseInt(videoDetails.viewCount).toLocaleString()
-            : undefined,
-        };
-      }
-    } catch (error) {
-      console.error(
-        `Failed to fetch YouTube Music metadata for ${url}:`,
-        error
-      );
-      new Notice("Failed to fetch YouTube Music data.", 3000);
+    const videoId = this.extractVideoId(url);
+    if (!videoId) {
+      throw new Error("Could not extract video ID from URL");
     }
 
-    // Fallback
+    const payload = {
+      videoId: videoId,
+      context: {
+        client: {
+          clientName: "WEB_REMIX",
+          clientVersion: "1.20251015.03.00",
+          hl: "en",
+          gl: "US"
+        }
+      }
+    };
+
+    const response = await requestUrl({
+      url: "https://music.youtube.com/youtubei/v1/player?prettyPrint=false",
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify(payload)
+    });
+
+    const data = JSON.parse(response.text);
+    const videoDetails = data.videoDetails;
+
+    if (!videoDetails) {
+      throw new Error("Could not find videoDetails in response");
+    }
+
     return {
-      title: escapeMarkdownChars(url),
-      artist: undefined,
-      duration: undefined,
-      views: undefined,
+      title: videoDetails.title ? escapeMarkdownChars(videoDetails.title) : undefined,
+      artist: videoDetails.author ? escapeMarkdownChars(videoDetails.author) : undefined,
+      duration: videoDetails.lengthSeconds
+        ? formatDuration(parseInt(videoDetails.lengthSeconds))
+        : undefined,
+      views: videoDetails.viewCount
+        ? parseInt(videoDetails.viewCount).toLocaleString()
+        : undefined,
     };
   }
 
@@ -346,22 +300,12 @@ class YouTubeMusicClient implements Client {
     return urlObj.searchParams.get("v");
   }
 
-  format(
-    metadata: Record<string, string | undefined>,
-    url: string,
-    plugin: SmartLinkFormatterPlugin
-  ): string {
-    const template = plugin.settings.clientFormats?.[this.name] || this.defaultFormat;
-    const formattedText = formatTemplate(template, metadata, url);
-    return wrapInMarkdownLink(formattedText, url);
-  }
-
   matches = (url: string) => {
     return url.match(/^https?:\/\/music\.youtube\.com\//) !== null;
   };
 }
 
-class ImageClient implements Client {
+class ImageClient extends Client {
   readonly name = "image" as const;
   displayName = "Image";
   defaultFormat = "![{title}]";
@@ -380,31 +324,14 @@ class ImageClient implements Client {
   async fetchMetadata(
     url: string
   ): Promise<Record<string, string | undefined>> {
-    try {
-      const filename = url.substring(url.lastIndexOf("/") + 1);
-      return {
-        title: filename
-          ? escapeMarkdownChars(decodeURIComponent(filename))
-          : "image",
-      };
-    } catch (error) {
-      console.error("Error parsing image URL:", error);
-      return { title: "image" };
-    }
-  }
-
-  format(
-    metadata: Record<string, string | undefined>,
-    url: string,
-    plugin: SmartLinkFormatterPlugin
-  ): string {
-    const template = plugin.settings.clientFormats?.[this.name] || this.defaultFormat;
-    const formattedText = formatTemplate(template, metadata, url);
-    return wrapInMarkdownLink(formattedText, url);
+    const filename = url.substring(url.lastIndexOf("/") + 1);
+    return {
+      title: filename ? escapeMarkdownChars(decodeURIComponent(filename)) : "image",
+    };
   }
 }
 
-class TwitterClient implements Client {
+class TwitterClient extends Client {
   readonly name = "twitter" as const;
   displayName = "Twitter/X";
   defaultFormat = "[{text}] - @{author}";
@@ -490,74 +417,57 @@ class TwitterClient implements Client {
   async fetchMetadata(
     url: string
   ): Promise<Record<string, string | undefined>> {
-    try {
-      if (!this.queryId || !this.bearerToken) {
-        await this.loadTwitterAPIConfig();
-      }
-
-      const tweetId = this.extractTweetId(url);
-      if (!tweetId) {
-        throw new Error("Could not extract tweet ID from URL");
-      }
-
-      const guestToken = await this.getGuestToken();
-
-      const variables = {
-        tweetId: tweetId,
-        withCommunity: false,
-        includePromotedContent: false,
-        withVoice: false
-      };
-
-      const apiUrl = `https://x.com/i/api/graphql/${this.queryId}/TweetResultByRestId?variables=${encodeURIComponent(JSON.stringify(variables))}&features=${encodeURIComponent(JSON.stringify(this.features))}&fieldToggles=${encodeURIComponent(JSON.stringify(this.fieldToggles))}`;
-
-      const response = await requestUrl({
-        url: apiUrl,
-        method: "GET",
-        headers: {
-          "authorization": this.bearerToken!,
-          "x-guest-token": guestToken,
-          "x-twitter-active-user": "yes",
-          "x-twitter-client-language": "en"
-        }
-      });
-
-      const data = JSON.parse(response.text);
-      const result = data?.data?.tweetResult?.result;
-
-      if (!result) {
-        throw new Error("Tweet result not found");
-      }
-
-      const legacy = result.legacy;
-      const username = result.core.user_results.result.core.screen_name;
-      const authorName = result.core.user_results.result.core.name;
-
-      return {
-        text: legacy?.full_text ? escapeMarkdownChars(legacy.full_text) : undefined,
-        author: username ? escapeMarkdownChars(username) : undefined,
-        name: authorName ? escapeMarkdownChars(authorName) : undefined,
-        likes: legacy?.favorite_count,
-        retweets: legacy?.retweet_count,
-        replies: legacy?.reply_count,
-        views: result.views?.count ? parseInt(result.views.count).toLocaleString() : undefined,
-        created_at: legacy?.created_at ? escapeMarkdownChars(legacy.created_at) : undefined
-      };
-    } catch (error) {
-      console.error(`Failed to fetch Twitter metadata for ${url}:`, error);
-      new Notice("Failed to fetch Twitter data.", 3000);
+    if (!this.queryId || !this.bearerToken) {
+      await this.loadTwitterAPIConfig();
     }
 
-    // Fallback
+    const tweetId = this.extractTweetId(url);
+    if (!tweetId) {
+      throw new Error("Could not extract tweet ID from URL");
+    }
+
+    const guestToken = await this.getGuestToken();
+
+    const variables = {
+      tweetId: tweetId,
+      withCommunity: false,
+      includePromotedContent: false,
+      withVoice: false
+    };
+
+    const apiUrl = `https://x.com/i/api/graphql/${this.queryId}/TweetResultByRestId?variables=${encodeURIComponent(JSON.stringify(variables))}&features=${encodeURIComponent(JSON.stringify(this.features))}&fieldToggles=${encodeURIComponent(JSON.stringify(this.fieldToggles))}`;
+
+    const response = await requestUrl({
+      url: apiUrl,
+      method: "GET",
+      headers: {
+        "authorization": this.bearerToken!,
+        "x-guest-token": guestToken,
+        "x-twitter-active-user": "yes",
+        "x-twitter-client-language": "en"
+      }
+    });
+
+    const data = JSON.parse(response.text);
+    const result = data?.data?.tweetResult?.result;
+
+    if (!result) {
+      throw new Error("Tweet result not found");
+    }
+
+    const legacy = result.legacy;
+    const username = result.core.user_results.result.core.screen_name;
+    const authorName = result.core.user_results.result.core.name;
+
     return {
-      text: escapeMarkdownChars(url),
-      author: undefined,
-      name: undefined,
-      likes: undefined,
-      retweets: undefined,
-      replies: undefined,
-      views: undefined,
-      created_at: undefined
+      text: legacy?.full_text ? escapeMarkdownChars(legacy.full_text) : undefined,
+      author: username ? escapeMarkdownChars(username) : undefined,
+      name: authorName ? escapeMarkdownChars(authorName) : undefined,
+      likes: legacy?.favorite_count,
+      retweets: legacy?.retweet_count,
+      replies: legacy?.reply_count,
+      views: result.views?.count ? parseInt(result.views.count).toLocaleString() : undefined,
+      created_at: legacy?.created_at ? escapeMarkdownChars(legacy.created_at) : undefined
     };
   }
 
@@ -565,19 +475,9 @@ class TwitterClient implements Client {
     const match = url.match(/status\/(\d+)/);
     return match ? match[1] : null;
   }
-
-  format(
-    metadata: Record<string, string | undefined>,
-    url: string,
-    plugin: SmartLinkFormatterPlugin
-  ): string {
-    const template = plugin.settings.clientFormats?.[this.name] || this.defaultFormat;
-    const formattedText = formatTemplate(template, metadata, url);
-    return wrapInMarkdownLink(formattedText, url);
-  }
 }
 
-class RedditClient implements Client {
+class RedditClient extends Client {
   readonly name = "reddit" as const;
   displayName = "Reddit";
   defaultFormat = "[{title}] - r/{subreddit}";
@@ -593,61 +493,35 @@ class RedditClient implements Client {
   async fetchMetadata(
     url: string
   ): Promise<Record<string, string | undefined>> {
-    try {
-      const jsonUrl = url.replace(/\/$/, '') + '.json';
+    const jsonUrl = url.replace(/\/$/, '') + '.json';
 
-      const response = await requestUrl({
-        url: jsonUrl,
-        method: "GET",
-        headers: {
-          "User-Agent": "Obsidian Smart Link Formatter"
-        }
-      });
-
-      const data = JSON.parse(response.text);
-
-      const postData = data[0]?.data?.children?.[0]?.data;
-
-      if (!postData) {
-        throw new Error("Could not find post data");
+    const response = await requestUrl({
+      url: jsonUrl,
+      method: "GET",
+      headers: {
+        "User-Agent": "Obsidian Smart Link Formatter"
       }
+    });
 
-      return {
-        title: postData.title ? escapeMarkdownChars(postData.title) : undefined,
-        subreddit: postData.subreddit ? escapeMarkdownChars(postData.subreddit) : undefined,
-        author: postData.author ? escapeMarkdownChars(postData.author) : undefined,
-        upvotes: postData.ups ? postData.ups.toLocaleString() : undefined,
-        comments: postData.num_comments ? postData.num_comments.toLocaleString() : undefined,
-        created_at: postData.created_utc ? new Date(postData.created_utc * 1000).toISOString() : undefined
-      };
-    } catch (error) {
-      console.error(`Failed to fetch Reddit metadata for ${url}:`, error);
-      new Notice("Failed to fetch Reddit data.", 3000);
+    const data = JSON.parse(response.text);
+    const postData = data[0]?.data?.children?.[0]?.data;
+
+    if (!postData) {
+      throw new Error("Could not find post data");
     }
 
-    // Fallback
     return {
-      title: escapeMarkdownChars(url),
-      subreddit: undefined,
-      author: undefined,
-      upvotes: undefined,
-      comments: undefined,
-      created_at: undefined
+      title: postData.title ? escapeMarkdownChars(postData.title) : undefined,
+      subreddit: postData.subreddit ? escapeMarkdownChars(postData.subreddit) : undefined,
+      author: postData.author ? escapeMarkdownChars(postData.author) : undefined,
+      upvotes: postData.ups ? postData.ups.toLocaleString() : undefined,
+      comments: postData.num_comments ? postData.num_comments.toLocaleString() : undefined,
+      created_at: postData.created_utc ? new Date(postData.created_utc * 1000).toISOString() : undefined
     };
-  }
-
-  format(
-    metadata: Record<string, string | undefined>,
-    url: string,
-    plugin: SmartLinkFormatterPlugin
-  ): string {
-    const template = plugin.settings.clientFormats?.[this.name] || this.defaultFormat;
-    const formattedText = formatTemplate(template, metadata, url);
-    return wrapInMarkdownLink(formattedText, url);
   }
 }
 
-class GitHubClient implements Client {
+class GitHubClient extends Client {
   readonly name = "github" as const;
   displayName = "GitHub";
   defaultFormat = "[{owner}/{repo}]: {description}";
@@ -663,51 +537,33 @@ class GitHubClient implements Client {
   async fetchMetadata(
     url: string
   ): Promise<Record<string, string | undefined>> {
-    try {
-      const response = await requestUrl({ url: url, method: "GET" });
-      const html = response.text;
+    const response = await requestUrl({ url: url, method: "GET" });
+    const html = response.text;
 
-      const titleMatch = html.match(
-        /<meta property="og:title" content="([^"]+)"/
-      );
-      const fullRepoName = titleMatch?.[1];
+    const titleMatch = html.match(
+      /<meta property="og:title" content="([^"]+)"/
+    );
+    const fullRepoName = titleMatch?.[1];
 
-      let owner, repo, description;
-      if (fullRepoName) {
-        [owner, repo] = fullRepoName.split("/");
-        [repo, description] = repo.split(": ");
-        owner = owner.split("- ")[1];
-      }
-
-      return {
-        owner: owner ? escapeMarkdownChars(owner) : undefined,
-        repo: repo ? escapeMarkdownChars(repo) : undefined,
-        description: description ? escapeMarkdownChars(description) : undefined
-      };
-    } catch (error) {
-      console.error(`Failed to fetch GitHub metadata for ${url}:`, error);
-      new Notice("Failed to fetch GitHub data.", 3000);
+    let owner, repo, description;
+    if (fullRepoName) {
+      [owner, repo] = fullRepoName.split("/");
+      [repo, description] = repo.split(": ");
+      owner = owner.split("- ")[1];
     }
-    
-    const title = await getPageTitle(url);
-    return { title: escapeMarkdownChars(title) };
-  }
 
-  format(
-    metadata: Record<string, string | undefined>,
-    url: string,
-    plugin: SmartLinkFormatterPlugin
-  ): string {
-    const template = plugin.settings.clientFormats?.[this.name] || this.defaultFormat;
-    const formattedText = formatTemplate(template, metadata, url);
-    return wrapInMarkdownLink(formattedText, url);
+    return {
+      owner: owner ? escapeMarkdownChars(owner) : undefined,
+      repo: repo ? escapeMarkdownChars(repo) : undefined,
+      description: description ? escapeMarkdownChars(description) : undefined
+    };
   }
 }
 
 /**
  * Fallback client that matches every link and simply formats the title.
  */
-class DefaultClient implements Client {
+class DefaultClient extends Client {
   readonly name = "default" as const;
   displayName = "Default";
   defaultFormat = "[{title}]";
@@ -720,11 +576,7 @@ class DefaultClient implements Client {
       const title = await getPageTitle(url);
       return { title: title };
   }
-  format(metadata: Record<string, string | undefined>, url: string, plugin: SmartLinkFormatterPlugin): string {
-      const template = plugin.settings.clientFormats?.[this.name] || this.defaultFormat;
-      const formattedText = formatTemplate(template, metadata, url);
-      return wrapInMarkdownLink(formattedText, url);
-  }
+
   matches(url: string): boolean {
       return true;
   }
