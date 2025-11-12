@@ -43,10 +43,11 @@ Clients in the plugin have unique variables you can capture. For instance, when 
 
 Example format: `[{title}] by {channel}`
 
+Other clients follow similar patterns, and their variables can be found in the plugin settings.
+
 ### Replacements
 Regex replacements are also available to do rules-based replacements on the formatted text. Useful examples:
-  - Normalize spaces: `\s{2,}` -> (empty)
+  - Normalize spaces: `\s{2,}` -> ' '
   - Remove parenthetical text: `\s*\([^)]+\)` -> (empty)
-  - Truncate after `n` chars (link only): `(?<=(?<!\\)\[)(.{0,50}\S*?)\s.*?(?=(?<!\\)\])` -> `$1...`
-
-Other clients follow similar patterns, and their variables can be found in the plugin settings.
+  - Truncate after `n` chars (link only): `(?<=(?<!\\)\[)(.{0,n}\S*?)\s.*?(?=(?<!\\)\])` -> `$1...`
+  - Trim whitespaces: `^\s+|\s+$` -> (empty)
