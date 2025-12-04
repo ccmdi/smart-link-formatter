@@ -14,7 +14,7 @@ function blank(text: string | null | undefined): boolean {
  * Generates a unique placeholder token.
  * @returns The unique placeholder token.
  */
-export function generateUniqueToken(url: string, placeholderText: string = "Loading..."): string {
+export function generateUniqueToken(url: string): string {
   const id = `link-placeholder-${Date.now()}_${Math.floor(Math.random() * 1000000)}`;
   return `<span class="link-loading" id="${id}" ${url ? `url="${url}"` : ''}>Loading...</span>`; 
 }
@@ -32,12 +32,13 @@ function getUrlFinalSegment(url: string): string {
     const nonEmptySegments = segments.filter(segment => segment.length > 0);
     const last = nonEmptySegments.pop();
     return last || "File"; // If no segments, or last was empty after filtering.
-  } catch (_) {
+  } catch {
     return url; // Fallback to full URL if parsing fails
   }
 }
 
 // async wrapper to load a url in Electron BrowserWindow and settle on load finish or fail
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 async function loadElectronWindow(window: any, url: string): Promise<void> {
   return new Promise<void>((resolve, reject) => {
     const timer = setTimeout(() => {
@@ -46,8 +47,8 @@ async function loadElectronWindow(window: any, url: string): Promise<void> {
         if (window && !window.isDestroyed()) {
           window.webContents.stop();
         }
-      } catch (err) {
-        // Ignore
+      } catch {
+        // Ignore cleanup errors
       }
       reject(new Error(`Timeout loading URL: ${url}`));
     }, 30000); // 30-second timeout
@@ -83,10 +84,12 @@ async function electronGetPageTitle(url: string): Promise<string | null> {
     return null;
   }
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let electronPkg: any;
   try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
     electronPkg = require("electron");
-  } catch (e) {
+  } catch {
     console.warn("Smart Link Formatter: Electron module not available.");
     return null;
   }
@@ -95,8 +98,9 @@ async function electronGetPageTitle(url: string): Promise<string | null> {
     console.warn("Smart Link Formatter: Electron remote module not available for electronGetPageTitle.");
     return null;
   }
-  
+
   const { BrowserWindow } = electronPkg.remote;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let window: any = null;
 
   try {

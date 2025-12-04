@@ -1,5 +1,5 @@
 import { requestUrl } from "obsidian";
-import { escapeMarkdownChars, formatDuration, formatDate, applyTitleReplacements } from "utils";
+import { escapeMarkdownChars, formatDuration, applyTitleReplacements } from "utils";
 import SmartLinkFormatterPlugin from "main";
 import { getPageTitle } from "title-utils";
 import moment from "moment";
@@ -158,6 +158,7 @@ class YouTubeClient extends Client {
     const match = html.match(/var ytInitialPlayerResponse = ({.*?});/);
     const dataMatch = html.match(/var ytInitialData = ({.*?});/);
 
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     let playerResponseJson: any = null;
     if (match && match[1]) {
       playerResponseJson = JSON.parse(match[1]);
@@ -338,7 +339,9 @@ class TwitterClient extends Client {
 
   private queryId: string | null = null;
   private bearerToken: string | null = null;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   private features: any = null;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   private fieldToggles: any = null;
 
   getAvailableVariables(): string[] {
@@ -357,6 +360,7 @@ class TwitterClient extends Client {
       });
       const graphqlData = JSON.parse(graphqlResponse.text);
 
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const endpoint = graphqlData.find((item: any) =>
         item.exports?.operationName === "TweetResultByRestId"
       );
@@ -369,6 +373,7 @@ class TwitterClient extends Client {
           if (metadata.featureSwitch) {
             this.features = {};
             for (const [key, val] of Object.entries(metadata.featureSwitch)) {
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
               const value = (val as any).value;
               this.features[key] = value === "true" ? true : value === "false" ? false : value;
             }
@@ -577,7 +582,7 @@ class DefaultClient extends Client {
       return { title: title };
   }
 
-  matches(url: string): boolean {
+  matches(): boolean {
       return true;
   }
 }
