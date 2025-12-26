@@ -267,22 +267,25 @@ export default class SmartLinkFormatterPlugin extends Plugin {
 
     try {
         const editorContent = editor.getValue();
-        
+
         if (editorContent.includes(placeholder)) {
             const startPos = editor.offsetToPos(editorContent.indexOf(placeholder));
             const endPos = editor.offsetToPos(editorContent.indexOf(placeholder) + placeholder.length);
             editor.replaceRange(newText, startPos, endPos);
             didReplace = true;
         } else {
-             console.warn("Smart Link Formatter: Placeholder not found in editor content.");
-             didReplace = false;
+            // Fallback: placeholder was removed/modified, insert at current cursor position
+            console.warn("Smart Link Formatter: Placeholder not found, inserting at cursor position.");
+            editor.replaceSelection(newText);
+            new Notice("Link resolved (inserted at cursor)");
+            didReplace = true;
         }
     } catch (error) {
         console.error("Smart Link Formatter: Failed to replace placeholder.", error);
         new Notice("Error updating link in file.");
         didReplace = false;
     }
-    
+
     this.activePlaceholders.delete(placeholder);
     return didReplace;
   }
