@@ -277,7 +277,6 @@ export default class SmartLinkFormatterPlugin extends Plugin {
             // Fallback: placeholder was removed/modified, insert at current cursor position
             console.warn("Smart Link Formatter: Placeholder not found, inserting at cursor position.");
             editor.replaceSelection(newText);
-            new Notice("Link resolved (inserted at cursor)");
             didReplace = true;
         }
     } catch (error) {
