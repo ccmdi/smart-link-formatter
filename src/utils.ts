@@ -1,6 +1,9 @@
 import { Extraction } from "types/extraction";
 import { TitleReplacement } from "settings";
 
+export const MARKDOWN_LINK_REGEX = /\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g;
+export const URL_REGEX = /https?:\/\/[^\s)]+/g;
+
 /**
  * Escapes special characters in a string to be used in Markdown.
  * @param text - The string to escape.
@@ -52,16 +55,103 @@ export function isLink(text: string): boolean {
 }
 
 /**
+ * Checks if a position is inside a protected context (code block, frontmatter, inline code, or HTML comment).
+ * @param allLines - All lines of the document.
+ * @param lineNum - The line number to check.
+ * @param ch - The character position in the line.
+ * @returns True if the position is in a protected context, false otherwise.
+ */
+export function isPositionProtected(allLines: string[], lineNum: number, ch: number): boolean {
+  const line = allLines[lineNum];
+  const textBefore = line.substring(0, ch);
+
+  const backticksBefore = (textBefore.match(/`/g) || []).length;
+  if (backticksBefore % 2 === 1) return true;
+
+  const charBefore = ch > 0 ? line[ch - 1] : '';
+  const charAfter = ch < line.length ? line[ch] : '';
+  if (charBefore === '`' || charAfter === '`') return true;
+
+  let inCodeBlock = false;
+  for (let i = 0; i < lineNum; i++) {
+    if (allLines[i].trim().startsWith('```')) {
+      inCodeBlock = !inCodeBlock;
+    }
+  }
+  if (inCodeBlock) return true;
+
+  if (lineNum === 0 && line.trim() === '---') return true;
+  if (lineNum > 0 && allLines[0].trim() === '---') {
+    let inFrontmatter = true;
+    for (let i = 1; i <= lineNum; i++) {
+      if (allLines[i].trim() === '---') {
+        inFrontmatter = false;
+        break;
+      }
+    }
+    if (inFrontmatter) return true;
+  }
+
+  const fullTextBefore = allLines.slice(0, lineNum).join('\n') + '\n' + textBefore;
+  const openComments = (fullTextBefore.match(/<!--/g) || []).length;
+  const closeComments = (fullTextBefore.match(/-->/g) || []).length;
+  if (openComments > closeComments) return true;
+
+  return false;
+}
+
+/**
+ * Finds all plain URLs in the given line range that are not already inside markdown links or protected contexts.
+ * @param allLines - All lines of the document.
+ * @param startLine - The first line to scan (inclusive).
+ * @param endLine - The last line to scan (inclusive).
+ * @returns Array of URL matches with their positions.
+ */
+export function findUnformattedUrls(
+  allLines: string[],
+  startLine: number,
+  endLine: number
+): Array<{ url: string; line: number; start: number; end: number }> {
+  URL_REGEX.lastIndex = 0;
+  const results: Array<{ url: string; line: number; start: number; end: number }> = [];
+
+  for (let lineNum = startLine; lineNum <= endLine; lineNum++) {
+    const line = allLines[lineNum];
+
+    const markdownRanges: Array<{ start: number; end: number }> = [];
+    MARKDOWN_LINK_REGEX.lastIndex = 0;
+    let mdMatch;
+    while ((mdMatch = MARKDOWN_LINK_REGEX.exec(line)) !== null) {
+      markdownRanges.push({ start: mdMatch.index, end: mdMatch.index + mdMatch[0].length });
+    }
+
+    URL_REGEX.lastIndex = 0;
+    let urlMatch;
+    while ((urlMatch = URL_REGEX.exec(line)) !== null) {
+      const start = urlMatch.index;
+      const end = start + urlMatch[0].length;
+
+      if (markdownRanges.some(r => start >= r.start && end <= r.end)) continue;
+      if (isPositionProtected(allLines, lineNum, start)) continue;
+
+      results.push({ url: urlMatch[0], line: lineNum, start, end });
+    }
+  }
+
+  return results;
+}
+
+/**
  * Extracts a markdown link at the cursor position.
  * @param line - The line of text.
  * @param cursorCh - The cursor position in the line.
  * @returns Extraction object if cursor is within a markdown link, null otherwise.
  */
 function extractMarkdownLink(line: string, cursorCh: number): Extraction | null {
-  const markdownLinkRegex = /\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g;
+  MARKDOWN_LINK_REGEX.lastIndex = 0;
   let match: RegExpExecArray | null;
 
-  while ((match = markdownLinkRegex.exec(line)) !== null) {
+  while ((match = MARKDOWN_LINK_REGEX.exec(line)) !== null) {
     const start = match.index;
     const end = start + match[0].length;
 
@@ -84,10 +174,10 @@ function extractMarkdownLink(line: string, cursorCh: number): Extraction | null 
  * @returns Extraction object if cursor is within a URL, null otherwise.
  */
 function extractPlainUrl(line: string, cursorCh: number): Extraction | null {
-  const urlRegex = /https?:\/\/[^\s)]+/g;
+  URL_REGEX.lastIndex = 0;
   let match: RegExpExecArray | null;
 
-  while ((match = urlRegex.exec(line)) !== null) {
+  while ((match = URL_REGEX.exec(line)) !== null) {
     const start = match.index;
     const end = start + match[0].length;
 

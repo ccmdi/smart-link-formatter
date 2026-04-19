@@ -6,7 +6,7 @@ import {
 } from "./settings";
 import { CLIENTS } from "clients";
 import { generateUniqueToken } from "title-utils";
-import { isLink, extractUrlAtCursor, unescapeHtml } from "utils";
+import { isLink, extractUrlAtCursor, unescapeHtml, isPositionProtected, findUnformattedUrls } from "utils";
 import { FailureMode } from "types/failure-mode";
 import { MarkdownView } from "obsidian"
 
@@ -45,6 +45,14 @@ export default class SmartLinkFormatterPlugin extends Plugin {
       name: 'Format link at cursor',
       editorCallback: (editor: Editor) => {
         this.formatLinkAtCursor(editor);
+      }
+    });
+
+    this.addCommand({
+      id: 'format-all-links',
+      name: 'Format all links',
+      editorCallback: (editor: Editor) => {
+        this.formatAllLinks(editor);
       }
     });
 
@@ -151,79 +159,25 @@ export default class SmartLinkFormatterPlugin extends Plugin {
   }
   
   private shouldReplace(editor: Editor, text: string): boolean {
-    //todo: rules for settings
     if (!isLink(text)) return false;
 
     const cursor = editor.getCursor();
     const line = editor.getLine(cursor.line);
-    
+
     if (editor.somethingSelected()) {
         return true;
     }
-    
-    // Check if pasting inside the parentheses of a markdown link: [...](|)
+
     const textBeforeCursor = line.substring(0, cursor.ch);
     const charAfterCursor = cursor.ch < line.length ? line[cursor.ch] : '';
-    
+
     const potentialLinkMatch = textBeforeCursor.match(/\[.*?\]\($/);
     if (potentialLinkMatch && charAfterCursor === ')') {
         return false;
     }
 
-    // Check if cursor is inside inline code (between backticks)
-    const backticksBefore = (textBeforeCursor.match(/`/g) || []).length;
-    if (backticksBefore % 2 === 1) {
-        return false;
-    }
-
-    // Check if pasting adjacent to inline code backticks
-    const charBeforeCursor = cursor.ch > 0 ? line[cursor.ch - 1] : '';
-    if (charBeforeCursor === '`' || charAfterCursor === '`') {
-        return false;
-    }
-
-    // Check if inside a code block
     const allLines = editor.getValue().split('\n');
-    let inCodeBlock = false;
-    for (let i = 0; i < cursor.line; i++) {
-        const trimmedLine = allLines[i].trim();
-        if (trimmedLine.startsWith('```')) {
-            inCodeBlock = !inCodeBlock;
-        }
-    }
-    if (inCodeBlock) {
-        return false;
-    }
-
-    // Check if inside YAML frontmatter
-    if (cursor.line === 0 && line.trim() === '---') {
-        return false;
-    }
-    if (cursor.line > 0) {
-        let inFrontmatter = false;
-        if (allLines[0].trim() === '---') {
-            inFrontmatter = true;
-            for (let i = 1; i <= cursor.line; i++) {
-                if (allLines[i].trim() === '---') {
-                    inFrontmatter = false;
-                    break;
-                }
-            }
-        }
-        if (inFrontmatter) {
-            return false;
-        }
-    }
-
-    // Check if inside HTML comment
-    const fullTextBeforeCursor = allLines.slice(0, cursor.line).join('\n') + '\n' + textBeforeCursor;
-    const openComments = (fullTextBeforeCursor.match(/<!--/g) || []).length;
-    const closeComments = (fullTextBeforeCursor.match(/-->/g) || []).length;
-    if (openComments > closeComments) {
-        return false;
-    }
-
-    return true;
+    return !isPositionProtected(allLines, cursor.line, cursor.ch);
   }
 
   private shouldOverride(editor: Editor): boolean {
@@ -289,10 +243,35 @@ export default class SmartLinkFormatterPlugin extends Plugin {
     return didReplace;
   }
 
-  /**
-   * Formats a URL at the cursor position by fetching its title and replacing it with a formatted link.
-   * @param editor - The editor to format the link in.
-   */
+  private formatAllLinks(editor: Editor) {
+    const hasSelection = editor.somethingSelected();
+    const allLines = editor.getValue().split('\n');
+
+    let startLine: number, endLine: number;
+    if (hasSelection) {
+      startLine = editor.getCursor('from').line;
+      endLine = editor.getCursor('to').line;
+    } else {
+      startLine = 0;
+      endLine = allLines.length - 1;
+    }
+
+    const urls = findUnformattedUrls(allLines, startLine, endLine)
+      .filter(u => !this.isBlacklisted(u.url));
+
+    if (urls.length === 0) {
+      new Notice("No unformatted links found");
+      return;
+    }
+
+    new Notice(`Formatting ${urls.length} link${urls.length > 1 ? 's' : ''}...`);
+
+    for (const { url, line, start, end } of urls.reverse()) {
+      editor.setSelection({ line, ch: start }, { line, ch: end });
+      this.handleFormat(url, editor);
+    }
+  }
+
   async formatLinkAtCursor(editor: Editor) {
     const cursor = editor.getCursor();
     const line = editor.getLine(cursor.line);
