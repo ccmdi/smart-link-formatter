@@ -136,6 +136,44 @@ describe('client matching', () => {
       expect(matchClient('https://obsidian.md')).toBe('default');
     });
   });
+
+  describe('edge cases', () => {
+    it('YouTube with timestamp', () => {
+      expect(matchClient('https://youtube.com/watch?v=abc&t=120')).toBe('youtube');
+    });
+
+    it('YouTube playlist URL', () => {
+      expect(matchClient('https://youtube.com/playlist?list=PLrAXtmErZgOeiKm4sgNOknGvNjby9efdf')).toBe('youtube');
+    });
+
+    it('GitHub subpage (issues, PRs) falls back to default', () => {
+      expect(matchClient('https://github.com/user/repo/issues/1')).toBe('default');
+    });
+
+    it('GitHub user profile falls back to default', () => {
+      expect(matchClient('https://github.com/obsidianmd')).toBe('default');
+    });
+
+    it('Reddit old.reddit.com falls back to default', () => {
+      expect(matchClient('https://old.reddit.com/r/test/comments/abc/def/')).toBe('default');
+    });
+
+    it('m.youtube.com falls back to default (not matched)', () => {
+      expect(matchClient('https://m.youtube.com/watch?v=abc')).toBe('default');
+    });
+
+    it('YouTube embed URL falls back to default', () => {
+      expect(matchClient('https://youtube.com/embed/abc')).toBe('youtube');
+    });
+
+    it('twitter profile (no status) falls back to default', () => {
+      expect(matchClient('https://x.com/elikiiii')).toBe('default');
+    });
+
+    it('image URL with query params still matches image', () => {
+      expect(matchClient('https://example.com/photo.jpg?width=500')).toBe('default');
+    });
+  });
 });
 
 // -- Real network: fetchMetadata against live URLs --
@@ -166,6 +204,46 @@ describe('fetchMetadata (live network)', () => {
     const metadata = await defaultClient.fetchMetadata('https://obsidian.md');
     expect(metadata.title).toBeTruthy();
     expect(metadata.title).not.toBe('https://obsidian.md');
+  }, 15000);
+
+  it('YouTube: extracts metadata from short URL (youtu.be)', async () => {
+    const metadata = await youtube.fetchMetadata('https://youtu.be/dQw4w9WgXcQ');
+    expect(metadata.title).toBeTruthy();
+    expect(metadata.channel).toBeTruthy();
+  }, 15000);
+
+  it('YouTube: extracts duration', async () => {
+    const metadata = await youtube.fetchMetadata('https://www.youtube.com/watch?v=dQw4w9WgXcQ');
+    expect(metadata.duration).toBeTruthy();
+    expect(metadata.duration).toMatch(/^\d+:\d{2}$/);
+  }, 15000);
+
+  it('YouTube: extracts view count', async () => {
+    const metadata = await youtube.fetchMetadata('https://www.youtube.com/watch?v=dQw4w9WgXcQ');
+    expect(metadata.views).toBeTruthy();
+  }, 15000);
+
+  it('YouTube Music: extracts title and artist', async () => {
+    const ytMusic = CLIENTS.find(c => c.name === 'youtube-music')!;
+    const metadata = await ytMusic.fetchMetadata('https://music.youtube.com/watch?v=dQw4w9WgXcQ');
+    expect(metadata.title).toBeTruthy();
+    expect(metadata.artist).toBeTruthy();
+  }, 15000);
+
+  it('GitHub: extracts description', async () => {
+    const metadata = await github.fetchMetadata('https://github.com/obsidianmd/obsidian-api');
+    expect(metadata.description).toBeTruthy();
+  }, 15000);
+
+  it('Image: extracts filename as title', async () => {
+    const image = CLIENTS.find(c => c.name === 'image')!;
+    const metadata = await image.fetchMetadata('https://upload.wikimedia.org/wikipedia/commons/4/47/PNG_transparency_demonstration_1.png');
+    expect(metadata.title).toContain('PNG\\_transparency\\_demonstration\\_1.png');
+  }, 15000);
+
+  it('Default: handles non-HTML content gracefully', async () => {
+    const metadata = await defaultClient.fetchMetadata('https://raw.githubusercontent.com/obsidianmd/obsidian-api/master/obsidian.d.ts');
+    expect(metadata.title).toBeTruthy();
   }, 15000);
 });
 
@@ -227,5 +305,47 @@ describe('findUnformattedUrls', () => {
     const results = findUnformattedUrls(lines, 0, 3);
     expect(results).toHaveLength(1);
     expect(results[0].url).toBe('https://real.com');
+  });
+
+  it('skips URLs in HTML comments', () => {
+    const lines = ['<!-- https://example.com -->'];
+    const results = findUnformattedUrls(lines, 0, 0);
+    expect(results).toHaveLength(0);
+  });
+
+  it('skips URLs in multi-line HTML comments', () => {
+    const lines = ['<!--', 'https://example.com', '-->', 'https://real.com'];
+    const results = findUnformattedUrls(lines, 0, 3);
+    expect(results).toHaveLength(1);
+    expect(results[0].url).toBe('https://real.com');
+  });
+
+  it('handles mixed formatted and unformatted on the same line', () => {
+    const lines = ['[Example](https://example.com) and https://other.com'];
+    const results = findUnformattedUrls(lines, 0, 0);
+    expect(results).toHaveLength(1);
+    expect(results[0].url).toBe('https://other.com');
+  });
+
+  it('finds URL after closing code block', () => {
+    const lines = ['```', 'code', '```', 'https://example.com'];
+    const results = findUnformattedUrls(lines, 0, 3);
+    expect(results).toHaveLength(1);
+    expect(results[0].url).toBe('https://example.com');
+  });
+
+  it('handles empty lines gracefully', () => {
+    const lines = ['', 'https://example.com', '', ''];
+    const results = findUnformattedUrls(lines, 0, 3);
+    expect(results).toHaveLength(1);
+  });
+
+  it('returns correct positions for replacement', () => {
+    const lines = ['text https://example.com more'];
+    const results = findUnformattedUrls(lines, 0, 0);
+    expect(results[0].line).toBe(0);
+    expect(results[0].start).toBe(5);
+    expect(results[0].end).toBe(24);
+    expect(lines[0].substring(results[0].start, results[0].end)).toBe('https://example.com');
   });
 });
