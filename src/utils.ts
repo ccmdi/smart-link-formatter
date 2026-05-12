@@ -51,7 +51,7 @@ export function unescapeHtml(text: string): string {
 }
 
 export function isLink(text: string): boolean {
-  return !!text.match(/^https?:\/\//)
+  return !!text.trim().match(/^https?:\/\/\S+$/)
 }
 
 export function normalizeUrl(url: string): string {
