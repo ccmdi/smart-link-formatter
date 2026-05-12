@@ -109,11 +109,25 @@ export default class SmartLinkFormatterPlugin extends Plugin {
     if (!activeFile) return;
 
     if (this.shouldOverride(editor)) return;
-    if (!this.shouldReplace(editor, clipboardText)) return;
-    if (this.isBlacklisted(clipboardText)) return;
-    evt.preventDefault();
 
-    this.handleFormat(clipboardText, editor);
+    if (this.shouldReplace(editor, clipboardText)) {
+      if (this.isBlacklisted(clipboardText)) return;
+      evt.preventDefault();
+      this.handleFormat(clipboardText, editor);
+      return;
+    }
+
+    if (/https?:\/\//.test(clipboardText)) {
+      const cursor = editor.getCursor();
+      const allLines = editor.getValue().split('\n');
+      if (isPositionProtected(allLines, cursor.line, cursor.ch)) return;
+
+      evt.preventDefault();
+      const startLine = cursor.line;
+      editor.replaceSelection(clipboardText);
+      const endLine = editor.getCursor().line;
+      this.formatLinksInRange(editor, startLine, endLine);
+    }
   }
 
   private async handleFormat(clipboardText: string, editor: Editor) {
@@ -244,32 +258,35 @@ export default class SmartLinkFormatterPlugin extends Plugin {
     return didReplace;
   }
 
-  private formatAllLinks(editor: Editor) {
-    const hasSelection = editor.somethingSelected();
+  private formatLinksInRange(editor: Editor, startLine: number, endLine: number): number {
     const allLines = editor.getValue().split('\n');
-
-    let startLine: number, endLine: number;
-    if (hasSelection) {
-      startLine = editor.getCursor('from').line;
-      endLine = editor.getCursor('to').line;
-    } else {
-      startLine = 0;
-      endLine = allLines.length - 1;
-    }
-
     const urls = findUnformattedUrls(allLines, startLine, endLine)
       .filter(u => !this.isBlacklisted(u.url));
-
-    if (urls.length === 0) {
-      new Notice("No unformatted links found");
-      return;
-    }
-
-    new Notice(`Formatting ${urls.length} link${urls.length > 1 ? 's' : ''}...`);
 
     for (const { url, line, start, end } of urls.reverse()) {
       editor.setSelection({ line, ch: start }, { line, ch: end });
       this.handleFormat(url, editor);
+    }
+
+    return urls.length;
+  }
+
+  private formatAllLinks(editor: Editor) {
+    let startLine: number, endLine: number;
+    if (editor.somethingSelected()) {
+      startLine = editor.getCursor('from').line;
+      endLine = editor.getCursor('to').line;
+    } else {
+      startLine = 0;
+      endLine = editor.getValue().split('\n').length - 1;
+    }
+
+    const count = this.formatLinksInRange(editor, startLine, endLine);
+
+    if (count === 0) {
+      new Notice("No unformatted links found");
+    } else {
+      new Notice(`Formatting ${count} link${count > 1 ? 's' : ''}...`);
     }
   }
 
