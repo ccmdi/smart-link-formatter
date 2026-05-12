@@ -220,7 +220,7 @@ class YouTubeClient extends Client {
   }
 
   matches = (url: string) => {
-    if (url.match(/^https?:\/\/(www\.youtube\.com|youtu\.be)\//)) {
+    if (url.match(/^https?:\/\/(?:www\.)?(youtube\.com|youtu\.be)\//)) {
       return true;
     }
     return false;
