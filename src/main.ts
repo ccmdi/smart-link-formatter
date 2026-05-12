@@ -130,7 +130,8 @@ export default class SmartLinkFormatterPlugin extends Plugin {
     let didReplace = false;
 
     try {
-      const client = CLIENTS.find(client => client.matches(clipboardText));
+      const normalized = clipboardText.replace(/^https?:\/\/(www\.)?/, 'https://');
+      const client = CLIENTS.find(client => client.matches(normalized));
       if (client) {
         const metadata = await Promise.race([
           client.fetchMetadata(clipboardText),

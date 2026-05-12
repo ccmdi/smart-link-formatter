@@ -220,7 +220,7 @@ class YouTubeClient extends Client {
   }
 
   matches = (url: string) => {
-    if (url.match(/^https?:\/\/(www\.youtube\.com|youtu\.be)\//)) {
+    if (url.match(/^https:\/\/(youtube\.com|youtu\.be)\//)) {
       return true;
     }
     return false;
@@ -302,7 +302,7 @@ class YouTubeMusicClient extends Client {
   }
 
   matches = (url: string) => {
-    return url.match(/^https?:\/\/music\.youtube\.com\//) !== null;
+    return url.match(/^https:\/\/music\.youtube\.com\//) !== null;
   };
 }
 
@@ -349,7 +349,7 @@ class TwitterClient extends Client {
   }
 
   matches = (url: string) => {
-    return /^https?:\/\/(twitter\.com|x\.com)\/\w+\/status\/\d+/.test(url);
+    return /^https:\/\/(twitter\.com|x\.com)\/\w+\/status\/\d+/.test(url);
   };
 
   async loadTwitterAPIConfig(): Promise<void> {
@@ -492,7 +492,7 @@ class RedditClient extends Client {
   }
 
   matches = (url: string) => {
-    return /^https?:\/\/(www\.)?reddit\.com\/r\/[\w-]+\/comments\//.test(url);
+    return /^https:\/\/reddit\.com\/r\/[\w-]+\/comments\//.test(url);
   };
 
   async fetchMetadata(
@@ -536,7 +536,7 @@ class GitHubClient extends Client {
   }
 
   matches = (url: string) => {
-    return /^https?:\/\/github\.com\/[\w-]+\/[\w-]+(\/)?$/.test(url);
+    return /^https:\/\/github\.com\/[\w-]+\/[\w-]+(\/)?$/.test(url);
   };
 
   async fetchMetadata(
