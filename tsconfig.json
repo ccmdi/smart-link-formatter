@@ -1,6 +1,8 @@
 {
     "compilerOptions": {
-      "baseUrl": "./src",
+      "paths": {
+        "*": ["./src/*"]
+      },
       "allowSyntheticDefaultImports": true,
       "inlineSourceMap": true,
       "inlineSources": true,
@@ -8,7 +10,6 @@
       "target": "ES6",
       "allowJs": true,
       "noImplicitAny": true,
-      "moduleResolution": "node",
       "importHelpers": true,
       "isolatedModules": true,
       "strictNullChecks": true,

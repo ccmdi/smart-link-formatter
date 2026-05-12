@@ -54,6 +54,10 @@ export function isLink(text: string): boolean {
   return !!text.match(/^https?:\/\//)
 }
 
+export function normalizeUrl(url: string): string {
+  return url.replace(/^https?:\/\/(www\.)?/, 'https://');
+}
+
 /**
  * Checks if a position is inside a protected context (code block, frontmatter, inline code, or HTML comment).
  * @param allLines - All lines of the document.

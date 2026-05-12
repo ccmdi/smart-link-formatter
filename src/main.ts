@@ -6,7 +6,7 @@ import {
 } from "./settings";
 import { CLIENTS } from "clients";
 import { generateUniqueToken } from "title-utils";
-import { isLink, extractUrlAtCursor, unescapeHtml, isPositionProtected, findUnformattedUrls } from "utils";
+import { isLink, extractUrlAtCursor, unescapeHtml, isPositionProtected, findUnformattedUrls, normalizeUrl } from "utils";
 import { FailureMode } from "types/failure-mode";
 import { MarkdownView } from "obsidian"
 
@@ -144,7 +144,7 @@ export default class SmartLinkFormatterPlugin extends Plugin {
     let didReplace = false;
 
     try {
-      const normalized = clipboardText.replace(/^https?:\/\/(www\.)?/, 'https://');
+      const normalized = normalizeUrl(clipboardText);
       const client = CLIENTS.find(client => client.matches(normalized));
       if (client) {
         const metadata = await Promise.race([
