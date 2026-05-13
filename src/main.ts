@@ -27,7 +27,8 @@ export default class SmartLinkFormatterPlugin extends Plugin {
       this.app.workspace.on(
         "editor-paste",
         (evt: ClipboardEvent, editor: Editor) => {
-          this.handlePaste(evt, editor);
+          if (evt.defaultPrevented) return;
+          void this.handlePaste(evt, editor);
         }
       )
     );
@@ -44,7 +45,7 @@ export default class SmartLinkFormatterPlugin extends Plugin {
       id: 'format-link-at-cursor',
       name: 'Format link at cursor',
       editorCallback: (editor: Editor) => {
-        this.formatLinkAtCursor(editor);
+        void this.formatLinkAtCursor(editor);
       }
     });
 
@@ -113,7 +114,7 @@ export default class SmartLinkFormatterPlugin extends Plugin {
     if (this.shouldReplace(editor, clipboardText)) {
       if (this.isBlacklisted(clipboardText)) return;
       evt.preventDefault();
-      this.handleFormat(clipboardText, editor);
+      void this.handleFormat(clipboardText, editor);
       return;
     }
 
@@ -138,7 +139,7 @@ export default class SmartLinkFormatterPlugin extends Plugin {
     editor.replaceSelection(placeholder);
 
     const timeoutPromise = new Promise((_, reject) =>
-      setTimeout(() => reject(new Error('Fetch timeout')), this.settings.timeoutSeconds * 1000)
+      window.setTimeout(() => reject(new Error('Fetch timeout')), this.settings.timeoutSeconds * 1000)
     );
 
     let didReplace = false;
@@ -265,7 +266,7 @@ export default class SmartLinkFormatterPlugin extends Plugin {
 
     for (const { url, line, start, end } of urls.reverse()) {
       editor.setSelection({ line, ch: start }, { line, ch: end });
-      this.handleFormat(url, editor);
+      void this.handleFormat(url, editor);
     }
 
     return urls.length;
@@ -311,6 +312,6 @@ export default class SmartLinkFormatterPlugin extends Plugin {
     const endPos = { line: cursor.line, ch: end };
     editor.setSelection(startPos, endPos);
 
-    this.handleFormat(url, editor);
+    void this.handleFormat(url, editor);
   }
 }

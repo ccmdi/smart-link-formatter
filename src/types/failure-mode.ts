@@ -3,7 +3,7 @@ export enum FailureMode {
     Revert = 'revert'
 }
 
-// eslint-disable-next-line @typescript-eslint/no-namespace
+// eslint-disable-next-line @typescript-eslint/no-namespace -- merging static methods with the enum
 export namespace FailureMode {
     export function format(mode: FailureMode, text: string): string {
         if (mode === FailureMode.Alert) {

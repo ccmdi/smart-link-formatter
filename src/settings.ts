@@ -131,12 +131,10 @@ export class LinkFormatterSettingTab extends PluginSettingTab {
                     });
             });
 
-        // Title replacements section
-        containerEl.createEl('h3', { text: 'Replacements' });
-        containerEl.createEl('p', {
-            text: 'Apply regex find/replace transformations after formatting links. Patterns are applied in order.',
-            cls: 'setting-item-description'
-        });
+        new Setting(containerEl)
+            .setName('Replacements')
+            .setDesc('Apply regex find/replace transformations after formatting links. Patterns are applied in order.')
+            .setHeading();
 
         // Display existing replacements
         this.plugin.settings.titleReplacements.forEach((replacement, index) => {

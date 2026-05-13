@@ -6,6 +6,8 @@ on:
 
 permissions:
   contents: write
+  id-token: write
+  attestations: write
 
 jobs:
   build:
@@ -44,6 +46,13 @@ jobs:
                 gh pr view "$pr_number" --json title,body --jq '"### " + .title + "\n\n" + .body + "\n"' >> release_notes.md 2>/dev/null || true
               done
           fi
+
+      - name: Attest build provenance
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: |
+            main.js
+            styles.css
 
       - name: Create draft release
         env:

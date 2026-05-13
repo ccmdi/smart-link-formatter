@@ -10,7 +10,7 @@ export const URL_REGEX = /https?:\/\/[^\s)]+/g;
  * @returns The escaped string.
  */
 export function escapeMarkdownChars(text: string): string {
-  return text.replace(/([\[\]|*_`\\])/g, "\\$1");
+  return text.replace(/([[\]|*_`\\])/g, "\\$1");
 }
 
 /**
