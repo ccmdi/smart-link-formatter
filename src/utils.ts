@@ -55,7 +55,7 @@ export function isLink(text: string): boolean {
 }
 
 export function normalizeUrl(url: string): string {
-  return url.replace(/^https?:\/\/(www\.)?/, 'https://');
+  return url.trim().replace(/^https?:\/\/(www\.)?/, 'https://');
 }
 
 /**

@@ -50,6 +50,10 @@ describe('normalizeUrl', () => {
   it('does not strip non-www subdomains', () => {
     expect(normalizeUrl('https://music.youtube.com/watch?v=abc')).toBe('https://music.youtube.com/watch?v=abc');
   });
+
+  it('trims leading and trailing whitespace', () => {
+    expect(normalizeUrl('  https://youtube.com/watch?v=abc  ')).toBe('https://youtube.com/watch?v=abc');
+  });
 });
 
 // -- Client matching (uses real CLIENTS + real normalizeUrl) --
