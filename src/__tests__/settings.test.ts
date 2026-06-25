@@ -50,6 +50,31 @@ describe('formatTemplate', () => {
   });
 });
 
+// -- GitHub Issue/PR format templates --
+
+describe('formatTemplate with GitHub Issue/PR metadata', () => {
+  const metadata = { owner: 'ccmdi', repo: 'smart-link-formatter', number: '11', type: 'Pull Request', title: 'Fallback to cursor for unresolved pastes' };
+  const url = 'https://github.com/ccmdi/smart-link-formatter/pull/11';
+
+  it('default format: [{owner}/{repo}#{number}]: {title}', () => {
+    expect(formatTemplate('[{owner}/{repo}#{number}]: {title}', metadata, url))
+      .toBe('[ccmdi/smart-link-formatter#11]: Fallback to cursor for unresolved pastes');
+  });
+
+  it('number only: [{number}]', () => {
+    expect(formatTemplate('[{number}]', metadata, url)).toBe('[11]');
+  });
+
+  it('full type: [{type} #{number}]', () => {
+    expect(formatTemplate('[{type} #{number}]', metadata, url)).toBe('[Pull Request #11]');
+  });
+
+  it('title with type: [{title} - {type} #{number}]', () => {
+    expect(formatTemplate('[{title} - {type} #{number}]', metadata, url))
+      .toBe('[Fallback to cursor for unresolved pastes - Pull Request #11]');
+  });
+});
+
 // -- wrapInMarkdownLink --
 
 describe('wrapInMarkdownLink', () => {

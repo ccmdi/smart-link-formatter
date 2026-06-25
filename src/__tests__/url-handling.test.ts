@@ -114,6 +114,26 @@ describe('client matching', () => {
     });
   });
 
+  describe('GitHub Issue/PR', () => {
+    it.each([
+      'https://github.com/user/repo/issues/1',
+      'https://github.com/user/repo/pull/11',
+      'https://github.com/user/repo/issues/123',
+      'http://github.com/user/repo/pull/5',
+      'https://www.github.com/user/repo/issues/42',
+    ])('matches %s', (url) => {
+      expect(matchClient(url)).toBe('github-issue');
+    });
+
+    it.each([
+      'https://github.com/user/repo',
+      'https://github.com/user/repo/actions',
+      'https://github.com/user/repo/tree/main',
+    ])('does not match %s', (url) => {
+      expect(matchClient(url)).not.toBe('github-issue');
+    });
+  });
+
   describe('GitHub', () => {
     it.each([
       'https://github.com/user/repo',
@@ -150,8 +170,12 @@ describe('client matching', () => {
       expect(matchClient('https://youtube.com/playlist?list=PLrAXtmErZgOeiKm4sgNOknGvNjby9efdf')).toBe('youtube');
     });
 
-    it('GitHub subpage (issues, PRs) falls back to default', () => {
-      expect(matchClient('https://github.com/user/repo/issues/1')).toBe('default');
+    it('GitHub issues match github-issue client', () => {
+      expect(matchClient('https://github.com/user/repo/issues/1')).toBe('github-issue');
+    });
+
+    it('GitHub PRs match github-issue client', () => {
+      expect(matchClient('https://github.com/user/repo/pull/1')).toBe('github-issue');
     });
 
     it('GitHub user profile falls back to default', () => {
@@ -185,6 +209,7 @@ describe('client matching', () => {
 describe('fetchMetadata (live network)', () => {
   const youtube = CLIENTS.find(c => c.name === 'youtube')!;
   const github = CLIENTS.find(c => c.name === 'github')!;
+  const githubIssue = CLIENTS.find(c => c.name === 'github-issue')!;
   const defaultClient = CLIENTS.find(c => c.name === 'default')!;
 
   it('YouTube: extracts title and channel from a real video', async () => {
@@ -237,6 +262,26 @@ describe('fetchMetadata (live network)', () => {
   it('GitHub: extracts description', async () => {
     const metadata = await github.fetchMetadata('https://github.com/obsidianmd/obsidian-api');
     expect(metadata.description).toBeTruthy();
+  }, 15000);
+
+  it('GitHub Issue/PR: extracts owner, repo, number, and title from a PR', async () => {
+    const metadata = await githubIssue.fetchMetadata('https://github.com/ccmdi/smart-link-formatter/pull/11');
+    expect(metadata.owner).toBe('ccmdi');
+    expect(metadata.repo).toBe('smart-link-formatter');
+    expect(metadata.number).toBe('11');
+    expect(metadata.type).toBe('Pull Request');
+    expect(metadata.title).toBeTruthy();
+    expect(metadata.title).not.toContain('Pull Request');
+    expect(metadata.title).not.toContain('ccmdi/smart-link-formatter');
+  }, 15000);
+
+  it('GitHub Issue/PR: extracts metadata from an issue', async () => {
+    const metadata = await githubIssue.fetchMetadata('https://github.com/ccmdi/smart-link-formatter/issues/17');
+    expect(metadata.owner).toBe('ccmdi');
+    expect(metadata.repo).toBe('smart-link-formatter');
+    expect(metadata.number).toBe('17');
+    expect(metadata.type).toBe('Issue');
+    expect(metadata.title).toBeTruthy();
   }, 15000);
 
   it('Image: extracts filename as title', async () => {

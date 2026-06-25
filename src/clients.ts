@@ -526,6 +526,54 @@ class RedditClient extends Client {
   }
 }
 
+class GitHubIssueClient extends Client {
+  readonly name = "github-issue" as const;
+  displayName = "GitHub Issue/PR";
+  defaultFormat = "[{owner}/{repo}#{number}]: {title}";
+
+  getAvailableVariables(): string[] {
+    return ["owner", "repo", "number", "type", "title", "url"];
+  }
+
+  matches = (url: string) => {
+    return /^https:\/\/github\.com\/[\w.-]+\/[\w.-]+\/(issues|pull)\/\d+/.test(url);
+  };
+
+  async fetchMetadata(
+    url: string
+  ): Promise<Record<string, string | undefined>> {
+    const pathMatch = url.match(
+      /github\.com\/([\w.-]+)\/([\w.-]+)\/(issues|pull)\/(\d+)/
+    );
+    if (!pathMatch) throw new Error("Could not parse GitHub issue/PR URL");
+
+    const [, owner, repo, kind, number] = pathMatch;
+    const type = kind === "pull" ? "Pull Request" : "Issue";
+
+    const response = await requestUrl({ url, method: "GET" });
+    const html = response.text;
+
+    const ogMatch = html.match(/<meta property="og:title" content="([^"]+)"/);
+    let title = ogMatch?.[1];
+
+    if (title) {
+      title = title
+        .replace(/ · GitHub$/, '')
+        .replace(/ · [\w.-]+\/[\w.-]+$/, '')
+        .replace(/ · (Pull Request|Issue) #\d+$/, '')
+        .replace(/ by [\w.-]+$/, '');
+    }
+
+    return {
+      owner: escapeMarkdownChars(owner),
+      repo: escapeMarkdownChars(repo),
+      number,
+      type,
+      title: title ? escapeMarkdownChars(title) : undefined,
+    };
+  }
+}
+
 class GitHubClient extends Client {
   readonly name = "github" as const;
   displayName = "GitHub";
@@ -536,7 +584,7 @@ class GitHubClient extends Client {
   }
 
   matches = (url: string) => {
-    return /^https:\/\/github\.com\/[\w-]+\/[\w-]+(\/)?$/.test(url);
+    return /^https:\/\/github\.com\/[\w.-]+\/[\w.-]+(\/)?$/.test(url);
   };
 
   async fetchMetadata(
@@ -593,6 +641,7 @@ export const CLIENTS = [
   new ImageClient(),
   new TwitterClient(),
   new RedditClient(),
+  new GitHubIssueClient(),
   new GitHubClient(),
   new DefaultClient(),
 ] as const;
