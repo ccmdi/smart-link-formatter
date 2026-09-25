@@ -488,40 +488,53 @@ class RedditClient extends Client {
   defaultFormat = "[{title}] - r/{subreddit}";
 
   getAvailableVariables(): string[] {
-    return ["title", "subreddit", "author", "upvotes", "comments", "created_at", "url"];
+    return ["title", "subreddit", "author", "upvotes", "created_at", "url"];
   }
 
   matches = (url: string) => {
-    return /^https:\/\/reddit\.com\/r\/[\w-]+\/comments\//.test(url);
+    return /^https:\/\/reddit\.com\/r\/[\w-]+\/(comments|s)\/\w+/.test(url);
   };
 
   async fetchMetadata(
     url: string
   ): Promise<Record<string, string | undefined>> {
-    const jsonUrl = url.replace(/\/$/, '') + '.json';
+    const parts = url.match(/reddit\.com\/r\/([\w-]+)\/(?:comments\/(\w+)|s\/\w+)/);
+    if (!parts) {
+      throw new Error("Unrecognized Reddit URL");
+    }
+    const subreddit = parts[1];
+    let postId: string | undefined = parts[2];
+
+    if (!postId) {
+      const shareResponse = await requestUrl({ url: url, method: "GET" });
+      postId = shareResponse.text.match(/comments\/(\w+)/)?.[1];
+      if (!postId) {
+        throw new Error("Could not resolve Reddit share link");
+      }
+    }
 
     const response = await requestUrl({
-      url: jsonUrl,
-      method: "GET",
-      headers: {
-        "User-Agent": "Obsidian Smart Link Formatter"
-      }
+      url: `https://embed.reddit.com/r/${subreddit}/comments/${postId}/`,
+      method: "GET"
     });
+    const html = response.text;
 
-    const data = JSON.parse(response.text);
-    const postData = data[0]?.data?.children?.[0]?.data;
-
-    if (!postData) {
+    const title = html.match(/<h1[^>]*>([\s\S]*?)<\/h1>/)?.[1]
+      ?? html.match(/<shreddit-embed-title>([\s\S]*?)<\/shreddit-embed-title>/)?.[1];
+    if (!title) {
       throw new Error("Could not find post data");
     }
 
+    const author = html.match(/reddit\.com\/user\/([^/"?]+)/)?.[1];
+    const upvotes = html.match(/<faceplate-number number="(\d+)"[^>]*><\/faceplate-number>\s*upvotes/)?.[1];
+    const createdAt = html.match(/<faceplate-timeago[^>]*ts="([^"]+)"/)?.[1];
+
     return {
-      title: postData.title ? escapeMarkdownChars(postData.title) : undefined,
-      subreddit: postData.subreddit ? escapeMarkdownChars(postData.subreddit) : undefined,
-      author: postData.author ? escapeMarkdownChars(postData.author) : undefined,
-      upvotes: postData.ups ? postData.ups.toLocaleString() : undefined,
-      comments: postData.num_comments ? postData.num_comments.toLocaleString() : undefined,
-      created_at: postData.created_utc ? new Date(postData.created_utc * 1000).toISOString() : undefined
+      title: escapeMarkdownChars(title.trim()),
+      subreddit: escapeMarkdownChars(subreddit),
+      author: author ? escapeMarkdownChars(author) : undefined,
+      upvotes: upvotes ? Number(upvotes).toLocaleString() : undefined,
+      created_at: createdAt ? new Date(createdAt).toISOString() : undefined
     };
   }
 }

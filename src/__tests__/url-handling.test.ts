@@ -109,6 +109,8 @@ describe('client matching', () => {
       'https://reddit.com/r/test/comments/abc/def/',
       'https://www.reddit.com/r/test/comments/abc/def/',
       'http://reddit.com/r/test/comments/abc/def/',
+      'https://reddit.com/r/test/s/AbC123xyz',
+      'https://www.reddit.com/r/test/s/AbC123xyz',
     ])('matches %s', (url) => {
       expect(matchClient(url)).toBe('reddit');
     });
@@ -227,6 +229,15 @@ describe('fetchMetadata (live network)', () => {
     const metadata = await github.fetchMetadata('https://github.com/obsidianmd/obsidian-api');
     expect(metadata.owner).toBeTruthy();
     expect(metadata.repo).toBeTruthy();
+  }, 15000);
+
+  it('Reddit: extracts title, author, and created_at from a post', async () => {
+    const reddit = CLIENTS.find(c => c.name === 'reddit')!;
+    const metadata = await reddit.fetchMetadata('https://www.reddit.com/r/AllAuthorsWelcome/comments/1ucuivu/');
+    expect(metadata.title).toBeTruthy();
+    expect(metadata.author).toBeTruthy();
+    expect(metadata.subreddit).toBe('AllAuthorsWelcome');
+    expect(metadata.created_at).toBeTruthy();
   }, 15000);
 
   it('Default: extracts page title from any site', async () => {
