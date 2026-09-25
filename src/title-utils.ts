@@ -37,11 +37,25 @@ function getUrlFinalSegment(url: string): string {
   }
 }
 
+interface ElectronWebContents {
+  on(event: string, listener: (...args: never[]) => void): void;
+  removeListener(event: string, listener: (...args: never[]) => void): void;
+  stop(): void;
+  getTitle(): string;
+  setAudioMuted(muted: boolean): void;
+}
+
+interface ElectronBrowserWindow {
+  webContents: ElectronWebContents;
+  loadURL(url: string): void;
+  isDestroyed(): boolean;
+  destroy(): void;
+}
+
 // async wrapper to load a url in Electron BrowserWindow and settle on load finish or fail
-// eslint-disable-next-line @typescript-eslint/no-explicit-any -- Electron BrowserWindow has no available type
-async function loadElectronWindow(window: any, url: string): Promise<void> {
+async function loadElectronWindow(window: ElectronBrowserWindow, url: string): Promise<void> {
   return new Promise<void>((resolve, reject) => {
-    const timer = window.setTimeout(() => {
+    const timer = setTimeout(() => {
       console.warn(`Smart Link Formatter: Timeout loading ${url} in Electron window.`);
       try {
         if (window && !window.isDestroyed()) {
@@ -54,15 +68,15 @@ async function loadElectronWindow(window: any, url: string): Promise<void> {
     }, 30000); // 30-second timeout
 
     const didFinishLoad = () => {
-      window.clearTimeout(timer);
+      clearTimeout(timer);
       window.webContents.removeListener("did-finish-load", didFinishLoad);
       window.webContents.removeListener("did-fail-load", didFailLoad);
       resolve();
     };
 
     // Corrected signature for did-fail-load
-    const didFailLoad = (event: Event, errorCode: number, errorDescription: string, validatedURL: string, isMainFrame: boolean) => {
-      window.clearTimeout(timer);
+    const didFailLoad = (event: unknown, errorCode: number, errorDescription: string, validatedURL: string, isMainFrame: boolean) => {
+      clearTimeout(timer);
       if (isMainFrame === false) {
         console.debug(`Smart Link Formatter: Non-main frame load failed for ${validatedURL}: ${errorDescription}. Continuing for main frame.`);
         return; // Don't reject the promise for sub-frame failures
@@ -84,8 +98,9 @@ async function electronGetPageTitle(url: string): Promise<string | null> {
     return null;
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Electron module loaded dynamically at runtime
-  let electronPkg: any;
+  let electronPkg: {
+    remote?: { BrowserWindow: new (options: Record<string, unknown>) => ElectronBrowserWindow };
+  };
   try {
     // eslint-disable-next-line @typescript-eslint/no-require-imports -- Electron must be loaded via require at runtime
     electronPkg = require("electron");
@@ -100,8 +115,7 @@ async function electronGetPageTitle(url: string): Promise<string | null> {
   }
 
   const { BrowserWindow } = electronPkg.remote;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Electron BrowserWindow instance
-  let window: any = null;
+  let window: ElectronBrowserWindow | null = null;
 
   try {
     window = new BrowserWindow({

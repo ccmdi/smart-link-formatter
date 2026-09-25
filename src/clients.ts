@@ -130,6 +130,24 @@ export function wrapInMarkdownLink(formattedText: string, url: string): string {
   return isEmbed ? `!${link}` : link;
 }
 
+interface YouTubePlayerResponse {
+  videoDetails?: {
+    title?: string;
+    author?: string;
+    shortDescription?: string;
+    viewCount?: string;
+    lengthSeconds?: string;
+  };
+  microformat?: {
+    playerMicroformatRenderer?: {
+      title?: { simpleText?: string };
+      ownerChannelName?: { simpleText?: string };
+      description?: { simpleText?: string };
+      publishDate?: string;
+    };
+  };
+}
+
 class YouTubeClient extends Client {
   readonly name = "youtube" as const;
   displayName = "YouTube";
@@ -158,8 +176,7 @@ class YouTubeClient extends Client {
     const match = html.match(/var ytInitialPlayerResponse = ({.*?});/);
     const dataMatch = html.match(/var ytInitialData = ({.*?});/);
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- YouTube player response has no typed schema
-    let playerResponseJson: any = null;
+    let playerResponseJson: YouTubePlayerResponse;
     if (match && match[1]) {
       playerResponseJson = JSON.parse(match[1]);
     } else if (dataMatch && dataMatch[1]) {
@@ -332,6 +349,17 @@ class ImageClient extends Client {
   }
 }
 
+interface TwitterGraphqlEndpoint {
+  exports?: {
+    operationName?: string;
+    queryId?: string;
+    metadata?: {
+      featureSwitch?: Record<string, { value?: string }>;
+      fieldToggles?: string[];
+    };
+  };
+}
+
 class TwitterClient extends Client {
   readonly name = "twitter" as const;
   displayName = "Twitter/X";
@@ -339,10 +367,8 @@ class TwitterClient extends Client {
 
   private queryId: string | null = null;
   private bearerToken: string | null = null;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- dynamic feature flags from external API config
-  private features: any = null;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- dynamic field toggles from external API config
-  private fieldToggles: any = null;
+  private features: Record<string, boolean | string | undefined> | null = null;
+  private fieldToggles: Record<string, boolean> | null = null;
 
   getAvailableVariables(): string[] {
     return ["text", "author", "name", "likes", "retweets", "replies", "views", "created_at", "url"];
@@ -358,23 +384,21 @@ class TwitterClient extends Client {
         url: "https://raw.githubusercontent.com/fa0311/TwitterInternalAPIDocument/master/docs/json/GraphQL.json",
         method: "GET"
       });
-      const graphqlData = JSON.parse(graphqlResponse.text);
+      const graphqlData: TwitterGraphqlEndpoint[] = JSON.parse(graphqlResponse.text);
 
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- external API response has no typed schema
-      const endpoint = graphqlData.find((item: any) =>
+      const endpoint = graphqlData.find(item =>
         item.exports?.operationName === "TweetResultByRestId"
       );
 
-      if (endpoint) {
-        this.queryId = endpoint.exports.queryId;
+      if (endpoint?.exports) {
+        this.queryId = endpoint.exports.queryId ?? null;
 
         const metadata = endpoint.exports.metadata;
         if (metadata) {
           if (metadata.featureSwitch) {
             this.features = {};
             for (const [key, val] of Object.entries(metadata.featureSwitch)) {
-              // eslint-disable-next-line @typescript-eslint/no-explicit-any -- untyped external API metadata
-              const value = (val as any).value;
+              const value = val.value;
               this.features[key] = value === "true" ? true : value === "false" ? false : value;
             }
           }

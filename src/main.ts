@@ -28,7 +28,7 @@ export default class SmartLinkFormatterPlugin extends Plugin {
         "editor-paste",
         (evt: ClipboardEvent, editor: Editor) => {
           if (evt.defaultPrevented) return;
-          void this.handlePaste(evt, editor);
+          this.handlePaste(evt, editor);
         }
       )
     );
@@ -101,7 +101,7 @@ export default class SmartLinkFormatterPlugin extends Plugin {
     await this.saveData(this.settings);
   }
 
-  async handlePaste(evt: ClipboardEvent, editor: Editor) {
+  handlePaste(evt: ClipboardEvent, editor: Editor) {
     if (!this.settings.autoLink) return;
     if (!evt.clipboardData) return;
 
